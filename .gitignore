@@ -1,0 +1,28 @@
+# ---------------- Python 运行产物 ----------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ---------------- 虚拟环境 ----------------
+.venv/
+venv/
+env/
+
+# ---------------- IDE ----------------
+.idea/
+.vscode/
+*.iml
+
+# ---------------- 测试运行时产物（不进版本库） ----------------
+logs/
+reports/allure_results/*
+reports/allure-report/
+reports/html-report/
+reports/screenshots/*
+!reports/screenshots/.gitkeep
+!reports/allure_results/.gitkeep
+
+# ---------------- 系统文件 ----------------
+.DS_Store
+Thumbs.db

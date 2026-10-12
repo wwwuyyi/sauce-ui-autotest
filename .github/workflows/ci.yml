@@ -1,0 +1,26 @@
+# CI 工作流：push / PR 触发，运行冒烟用例集（6 条核心主链路）
+# 配合 conftest 的环境变量覆盖实现"配置去本机化"：
+#   HEADLESS=true          -> 强制无头模式（GitHub runner 无显示器）
+#   EDGE_DRIVER_PATH 未设置 -> Selenium Manager 自动下载 chromedriver
+# （runner 自带 Chrome；仓库内无任何本机地址/账号/驱动路径信息）
+name: UI Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest      # 官方 runner 自带 Chrome；双平台可改 windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - name: 运行冒烟测试（无头 Chrome）
+        run: python -m pytest -m smoke --browser=chrome
+        env: { HEADLESS: "true" }
+      - name: 上传 Allure 原始结果（无论成败均可取回排障）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: reports/allure_results/
