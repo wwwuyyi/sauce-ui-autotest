@@ -99,6 +99,8 @@ source .venv/bin/activate
 
 # 安装依赖
 pip install -r requirements.txt
+如果太卡就走清华源：pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+或者阿里源：pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple
 ```
 
 > 无需手动下载 chromedriver：Selenium 4.6+ 内置 **Selenium Manager**，首次运行会自动下载与本地浏览器版本匹配的驱动。
