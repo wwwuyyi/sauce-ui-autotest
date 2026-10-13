@@ -157,6 +157,36 @@ allure serve reports/allure_results
 > 报告为**单文件交付**（CSS/JS/截图全部内联），可直接发送给任何人，
 > 或上传 GitHub Pages 在线浏览；数据源 JSON 不会被修改，随时可切换回官方 Allure 渲染。
 
+### 5.1 查看 CI（GitHub Actions）运行报告
+
+仓库已配置 `.github/workflows/ci.yml`：每次 push / PR 自动以无头 Chrome 运行冒烟集
+（`-m smoke`，6 条核心主链路），并把 Allure **原始数据**上传为 artifacts。
+CI 产物是标准 JSON，下载后需本地渲染成网页才能看：
+
+1. 打开仓库 **Actions** 页 → 点击目标运行 → 页面底部 **Artifacts** → 下载 `allure-results`；
+2. 解压到**任意目录**（下文统一用「解压目录」代指，放哪里都行，不必放进本项目）；
+3. 渲染查看（任选其一）：
+
+```bash
+# 方式一（推荐，零依赖）：内置生成器，输出单个 HTML 文件
+# 把「解压目录」替换成你自己的实际路径即可，人人路径不同属正常
+python generate_report.py --results 解压目录 --output 报告.html --open
+
+# 方式二：官方 Allure CLI（需本地安装 Allure + Java）
+allure serve 解压目录
+```
+
+示例（Windows / macOS / Linux 各举一种写法）：
+
+```bash
+python generate_report.py --results "D:\Downloads\allure-results" --output report.html --open
+python generate_report.py --results ~/Downloads/allure-results --output report.html --open
+python generate_report.py --results /home/user/Downloads/allure-results --output report.html --open
+```
+
+> 注意：CI 绿灯只代表冒烟集（6 条）通过；全量 56 条请本地执行 `python -m pytest`，
+> 报告生成方式与上文 5 节完全相同。
+
 ## 五、命令行参数
 
 
@@ -350,11 +380,18 @@ Selenium Manager 会自动下载与本地浏览器匹配的驱动。若报 `Sess
 </details>
 
 <details>
-<summary><b>Q2：如何在 CI（Jenkins/GitLab CI）中运行？</b></summary>
+<summary><b>Q2：如何在 CI 中运行？CI 跑通后怎么拿报告？</b></summary>
 
-1. 将 `config/env.yaml` 中 `browser.headless` 改为 `true`；
+本仓库已内置 **GitHub Actions** 工作流（`.github/workflows/ci.yml`）：push / PR 触发，
+无头 Chrome 运行冒烟集（`-m smoke`，6 条核心主链路），并将 `reports/allure_results/`
+原始数据上传为 artifacts，报告查看步骤见上文 **四、5.1 查看 CI（GitHub Actions）运行报告**。
+
+Jenkins / GitLab CI 接入同理：
+
+1. 执行环境开启无头模式（`HEADLESS=true`，或 `env.yaml` 中 `browser.headless: true`）；
 2. CI 执行：`python -m pytest`；
-3. 生成报告：`allure generate reports/allure_results -o reports/allure-report --clean`，归档 `reports/allure-report` 即可。
+3. 归档 `reports/allure_results/` 原始数据即可；需要 HTML 报告时，任意机器上解压后执行
+   `python generate_report.py --results <解压目录> --output report.html` 渲染（零依赖）。
 
 </details>
 

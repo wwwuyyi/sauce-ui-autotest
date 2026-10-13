@@ -40,13 +40,13 @@ def _expected_prices(prices_key: str) -> list:
 
 
 def _login_as(login_page, page_factory, account_key: str):
-    """以指定账号真实 UI 登录，返回已加载的 InventoryPage"""
+    """以指定账号真实 UI 登录，返回已加载的 InventoryPage（登录被拒自动重试）"""
     account = CONFIG["accounts"][account_key]
-    login_page.login(account["username"], account["password"])
-    page = page_factory(InventoryPage)
     # 特殊账号（error_user/glitch）带人工渲染延迟：统一使用慢账号等待预算，消除偶发超时
-    page.wait_inventory_loaded(timeout=CONFIG["timeout"]["glitch_wait"])
-    return page
+    login_page.login_and_wait_inventory(
+        account["username"], account["password"],
+        timeout=CONFIG["timeout"]["glitch_wait"])
+    return page_factory(InventoryPage)
 
 
 def _logout(login_page, page_factory):

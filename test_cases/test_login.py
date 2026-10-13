@@ -47,11 +47,8 @@ class TestLogin:
     def test_login_success_standard_user(self, login_page):
         account = CONFIG["accounts"]["standard"]
 
-        with allure.step("输入账号密码并点击登录"):
-            login_page.login(account["username"], account["password"])
-
-        with allure.step("等待商品列表页加载"):
-            login_page.wait_inventory_loaded()
+        with allure.step("输入账号密码并登录（登录被拒绝时自动重试）"):
+            login_page.login_and_wait_inventory(account["username"], account["password"])
 
         with allure.step("断言1-URL跳转到商品列表页"):
             assert login_page.get_current_url() == CONFIG["urls"]["inventory"]
@@ -163,8 +160,7 @@ class TestLogin:
         account = CONFIG["accounts"]["problem"]
 
         with allure.step("登录并等待商品列表加载"):
-            login_page.login(account["username"], account["password"])
-            login_page.wait_inventory_loaded()
+            login_page.login_and_wait_inventory(account["username"], account["password"])
 
         with allure.step("断言1-URL跳转到商品列表页"):
             assert login_page.get_current_url() == CONFIG["urls"]["inventory"]
@@ -219,9 +215,10 @@ class TestLogin:
         account = CONFIG["accounts"]["error_user"]
 
         with allure.step("登录并等待商品列表加载"):
-            login_page.login(account["username"], account["password"])
             # error_user 与 glitch 同为"带人工延迟"账号，统一走慢账号等待预算，消除偶发超时
-            login_page.wait_inventory_loaded(timeout=CONFIG["timeout"]["glitch_wait"])
+            login_page.login_and_wait_inventory(
+                account["username"], account["password"],
+                timeout=CONFIG["timeout"]["glitch_wait"])
 
         with allure.step("断言1-URL跳转到商品列表页"):
             assert login_page.get_current_url() == CONFIG["urls"]["inventory"]
@@ -249,8 +246,7 @@ class TestLogin:
         account = CONFIG["accounts"]["visual"]
 
         with allure.step("登录并等待商品列表加载"):
-            login_page.login(account["username"], account["password"])
-            login_page.wait_inventory_loaded()
+            login_page.login_and_wait_inventory(account["username"], account["password"])
 
         with allure.step("断言1-URL跳转到商品列表页"):
             assert login_page.get_current_url() == CONFIG["urls"]["inventory"]

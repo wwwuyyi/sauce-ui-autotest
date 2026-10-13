@@ -190,7 +190,8 @@ def inventory_page(login_page, page_factory, config):
     """
     from pages.inventory_page import InventoryPage
     account = config["accounts"]["standard"]
-    login_page.login(account["username"], account["password"])
+    # 登录+等待加载合并执行：登录被站点瞬时拒绝时自动重输重试，吸收偶发抖动
+    login_page.login_and_wait_inventory(account["username"], account["password"])
     page = page_factory(InventoryPage)
     page.wait_inventory_loaded()
     return page

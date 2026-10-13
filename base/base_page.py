@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 import allure
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, TimeoutException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.alert import Alert
 from selenium.webdriver.common.keys import Keys
@@ -148,13 +148,27 @@ class BasePage:
 
         安全说明：日志中不回显输入内容，避免密码等敏感信息泄露到日志文件。
         异常防护：捕获元素失效/被遮挡等常见注入异常，截图留证并抛出清晰错误。
+        回读校验：输入后回读 value 与目标值比对。React 类页面水合时可能重置输入框
+        （Selenium 输得极快，js 尚未接管 DOM），回读不一致则重新定位校正重输，
+        最多校正 2 次；仍不一致抛 ValueError，避免空表单被静默提交。
         """
         logger.info("向元素输入内容: %s", locator)
-        element = self.find_element(locator)
+        target = text or ""
         try:
-            if clear_first:
-                element.clear()
-            element.send_keys(text)
+            for attempt in range(3):  # 初次输入 + 最多 2 次校正重输
+                element = self.find_element(locator)
+                if clear_first:
+                    element.clear()
+                element.send_keys(text)
+                try:
+                    if (element.get_attribute("value") or "") == target:
+                        return
+                except StaleElementReferenceException:
+                    logger.warning("输入后元素已失效（页面重渲染），重新定位输入: %s", locator)
+                    continue
+                logger.warning("输入值回读不一致（可能为页面渲染竞态），第 %d 次校正重输: %s",
+                               attempt + 1, locator)
+            raise ValueError(f"输入值回读校验失败（3 次尝试均与目标不一致）: {locator}")
         except Exception as exc:
             logger.error("输入内容失败: %s, 异常: %s", locator, exc)
             self.save_screenshot("input_fail")
