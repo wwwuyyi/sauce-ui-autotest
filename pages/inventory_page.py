@@ -143,15 +143,38 @@ class InventoryPage(BasePage):
         """仅点击加购按钮（error_user 场景加购可能无响应，不做状态等待）"""
         self.click(self.add_button(slug))
 
-    def add_to_cart(self, slug: str) -> None:
-        """加购单个商品并等待按钮切换为 Remove（功能正常站点）"""
-        self.click(self.add_button(slug))
-        self.find_element(self.remove_button(slug))
+    def add_to_cart(self, slug: str, retries: int = 1) -> None:
+        """加购单个商品并等待按钮切换为 Remove（功能正常站点）
 
-    def remove_from_cart(self, slug: str) -> None:
-        """移除单个商品并等待按钮恢复为加购"""
-        self.click(self.remove_button(slug))
-        self.find_element(self.add_button(slug))
+        健壮性：偶发"点击后按钮未切换"（点击未落到目标/状态未翻转，等待 10s
+        仍无 Remove 按钮），此时加购按钮仍留在 DOM。检测到该特征自动重试点击
+        （默认 1 次），避免购物车预置等前置链路被瞬时抖动击穿。
+        """
+        for attempt in range(retries + 1):
+            self.click(self.add_button(slug))
+            try:
+                self.find_element(self.remove_button(slug))
+                return
+            except TimeoutException:
+                if attempt < retries and not self.is_add_button_absent(slug):
+                    logger.warning("加购[%s]后按钮未切换（点击疑似未生效），第 %d 次重试点击",
+                                   slug, attempt + 1)
+                    continue
+                raise
+
+    def remove_from_cart(self, slug: str, retries: int = 1) -> None:
+        """移除单个商品并等待按钮恢复为加购（按钮未恢复时自动重试点击，同加购健壮性）"""
+        for attempt in range(retries + 1):
+            self.click(self.remove_button(slug))
+            try:
+                self.find_element(self.add_button(slug))
+                return
+            except TimeoutException:
+                if attempt < retries and not self.is_remove_button_absent(slug):
+                    logger.warning("移除[%s]后按钮未恢复（点击疑似未生效），第 %d 次重试点击",
+                                   slug, attempt + 1)
+                    continue
+                raise
 
     def wait_remove_visible(self, slug: str) -> None:
         """等待移除按钮出现（加购成功标志）"""

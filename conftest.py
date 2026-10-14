@@ -23,6 +23,7 @@ import pytest
 from selenium import webdriver
 
 from utils.log_util import LogUtil
+from utils.screen_recorder import ScreenRecorder
 from utils.yaml_util import YamlUtil
 
 # ---------------- 全局常量 ----------------
@@ -144,8 +145,24 @@ def driver(request, config):
     # 明确关闭隐式等待：全项目只用显式等待，避免两种等待混用导致等待时长不可控
     driver_obj.implicitly_wait(0)
 
+    # 失败录屏：用例执行期间后台线程周期截图（环形缓冲，内存恒定），
+    # 用例失败时由 pytest_runtest_makereport 钩子把保留帧合成 GIF 附件进 Allure；
+    # 录制线程异常一律自吞，绝不反噬用例主流程。
+    recording_conf = config.get("recording", {}) or {}
+    recorder = ScreenRecorder(
+        driver_obj,
+        interval=recording_conf.get("interval", 0.5),
+        max_frames=recording_conf.get("max_frames", 40),
+        gif_width=recording_conf.get("gif_width", 640),
+    )
+    if recording_conf.get("enabled", True):
+        recorder.start()
+    request.node._screen_recorder = recorder  # 挂到节点上供失败钩子取用
+
     yield driver_obj  # 用例期间共享 driver 实例
 
+    # 先停录制线程再关浏览器：避免对已退出会话继续截图
+    recorder.stop()
     # 无论用例成功或失败，统一退出浏览器
     logger.info("关闭浏览器: %s", browser_name)
     driver_obj.quit()
@@ -260,3 +277,18 @@ def pytest_runtest_makereport(item, call):
                 )
         except Exception as exc:  # 截图失败不能影响用例本身的失败状态上报
             logger.error("失败截图生成异常: %s", exc)
+
+        # 失败录屏：把后台录制的保留帧合成为 GIF（失败前最后 N×interval 秒过程回放）
+        recorder = getattr(item, "_screen_recorder", None)
+        if recorder is not None:
+            gif_path = SCREENSHOT_DIR / f"{item.name}_{timestamp}.gif"
+            if recorder.save_gif(str(gif_path)):
+                try:
+                    with open(gif_path, "rb") as f:
+                        allure.attach(
+                            f.read(),
+                            name="失败录屏 GIF",
+                            attachment_type=allure.attachment_type.GIF,
+                        )
+                except Exception as exc:
+                    logger.error("失败录屏附件写入异常: %s", exc)

@@ -14,6 +14,9 @@ env/
 .vscode/
 *.iml
 
+# ---------------- Claude Code 本地设置（本机私有：权限/模型偏好，不入库） ----------------
+.claude/settings.local.json
+
 # ---------------- 测试运行时产物（不进版本库） ----------------
 logs/
 reports/allure_results/*

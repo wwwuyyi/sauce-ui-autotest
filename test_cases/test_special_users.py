@@ -21,10 +21,9 @@ from decimal import Decimal
 
 import allure
 
-from utils.allure_util import attach_text
 from pages.inventory_page import InventoryPage
 from pages.menu_page import MenuPage
-from utils.data_util import get_product
+from utils.allure_util import attach_text
 from utils.yaml_util import YamlUtil
 
 logger = logging.getLogger(__name__)
@@ -153,7 +152,6 @@ class TestSpecialUsers:
     @allure.title("SAUCE-SPC-003 error_user 交互异常校验（行为不一致性断言）")
     @allure.description("逐一点击 6 个加购按钮统计行为差异：实际成功加购数 < 6（基线 6/6）；hilo 排序失效")
     def test_error_user_interaction_anomaly(self, login_page, page_factory):
-        account = CONFIG["accounts"]["error_user"]
         click_logs = []
 
         with allure.step("登录并等待商品列表加载"):

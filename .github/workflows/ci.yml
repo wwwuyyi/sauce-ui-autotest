@@ -1,20 +1,42 @@
-# CI 工作流：push / PR 触发，运行冒烟用例集（6 条核心主链路）
+# CI 工作流（两个 job 按触发源分工）：
+#   smoke job —— push / PR 触发：冒烟 6 条核心主链路快速门禁，上传原始数据 artifact；
+#   pages job —— 定时 / 手动触发：全量 56 条，内置生成器渲染单文件 HTML 报告，
+#                自动发布到 GitHub Pages（报告地址 https://<用户名>.github.io/sauce-ui-autotest/，
+#                需一次性在仓库 Settings → Pages → Source 选择 "GitHub Actions"）。
 # 配合 conftest 的环境变量覆盖实现"配置去本机化"：
 #   HEADLESS=true          -> 强制无头模式（GitHub runner 无显示器）
 #   EDGE_DRIVER_PATH 未设置 -> Selenium Manager 自动下载 chromedriver
 # （runner 自带 Chrome；仓库内无任何本机地址/账号/驱动路径信息）
 name: UI Tests
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  schedule:
+    # 工作日 UTC 01:17（北京时间 09:17）自动运行全量并更新 Pages 报告
+    - cron: "17 1 * * 1-5"
+  workflow_dispatch:    # 手动触发：全量运行并更新 Pages 报告
+
+# pages job 发布所需的 Pages 权限；smoke job 不受影响
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  test:
+  # ---------- Job 1：冒烟门禁（每次 push / PR） ----------
+  smoke:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest      # 官方 runner 自带 Chrome；双平台可改 windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install -r requirements.txt
+      - name: 静态检查（ruff）
+        run: |
+          pip install ruff
+          ruff check .
       - name: 运行冒烟测试（无头 Chrome）
         run: python -m pytest -m smoke --browser=chrome
         env: { HEADLESS: "true" }
@@ -24,3 +46,41 @@ jobs:
         with:
           name: allure-results
           path: reports/allure_results/
+
+  # ---------- Job 2：全量 → 报告发布 GitHub Pages（定时 / 手动） ----------
+  pages:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - name: 运行全量测试（无头 Chrome，56 条）
+        run: python -m pytest --browser=chrome
+        env: { HEADLESS: "true" }
+      # 测试即便有失败也照常出报告并发布——报告的价值就是呈现失败现场
+      - name: 内置生成器渲染单文件 HTML 报告
+        if: always()
+        run: python generate_report.py
+      - name: 上传 Allure 原始结果存档（无论成败）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-full
+          path: reports/allure_results/
+      - name: 配置 Pages
+        if: always()
+        uses: actions/configure-pages@v4
+      - name: 上传 Pages 产物（html-report 自包含目录）
+        if: always()
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: reports/html-report
+      - name: 发布到 GitHub Pages
+        id: deployment
+        if: always()
+        uses: actions/deploy-pages@v4

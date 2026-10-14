@@ -23,6 +23,7 @@ import argparse
 import base64
 import html
 import json
+import shutil
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +46,7 @@ SEVERITY_CN = {
 }
 
 MAX_IMAGE_EMBED_BYTES = 1.5 * 1024 * 1024  # 超过 1.5MB 的图片不内嵌，改相对路径引用
+OVER_BUDGET_DIR_NAME = "attachments"       # 超大图附件目录名（位于输出 HTML 旁，随报告一起交付）
 TEXT_TRUNCATE = 4000                       # 文本附件最大展示字符数
 TRACE_TRUNCATE = 6000                      # 失败堆栈最大展示字符数
 
@@ -113,7 +115,7 @@ def label_map(case: dict) -> dict:
 # 二、HTML 片段渲染
 # ======================================================================
 
-def render_attachments(attachments: list, results_dir: Path) -> str:
+def render_attachments(attachments: list, results_dir: Path, asset_dir: Path = None) -> str:
     """渲染附件列表：图片内嵌 base64，文本/HTML 附件截断展示"""
     if not attachments:
         return ""
@@ -133,10 +135,19 @@ def render_attachments(attachments: list, results_dir: Path) -> str:
                 f'<div class="att"><div class="att-name">📷 {name}</div>'
                 f'<img class="att-img" src="data:{mime};base64,{data}" alt="{name}"></div>')
         elif mime.startswith("image/"):
-            # 超大图片：降级为相对路径引用（index.html 与图片同目录查看）
+            # 超大图片：复制到输出目录旁的 attachments/，报告目录自包含
+            # （可整体拷贝交付 / 直接整目录发布 GitHub Pages，无需再携带 allure_results）
+            refer = f"../allure_results/{html.escape(source)}"  # 兜底：结果目录相对引用
+            if asset_dir is not None:
+                try:
+                    asset_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(file_path, asset_dir / Path(source).name)
+                    refer = f"{OVER_BUDGET_DIR_NAME}/{html.escape(Path(source).name)}"
+                except OSError:
+                    pass  # 复制失败不阻断报告生成，回退为结果目录引用
             parts.append(
                 f'<div class="att"><div class="att-name">📷 {name}（大图，采用文件引用）</div>'
-                f'<img class="att-img" src="../allure_results/{html.escape(source)}" alt="{name}"></div>')
+                f'<img class="att-img" src="{refer}" alt="{name}"></div>')
         else:
             try:
                 text = file_path.read_text(encoding="utf-8", errors="ignore")
@@ -152,7 +163,7 @@ def render_attachments(attachments: list, results_dir: Path) -> str:
     return "".join(parts)
 
 
-def render_steps(steps: list, results_dir: Path) -> str:
+def render_steps(steps: list, results_dir: Path, asset_dir: Path = None) -> str:
     """递归渲染步骤树（含每步附件）"""
     if not steps:
         return ""
@@ -163,8 +174,8 @@ def render_steps(steps: list, results_dir: Path) -> str:
             f'<li class="step step-{status_cls}">'
             f'<span class="step-dot" title="{status_name}"></span>'
             f'<span class="step-name">{html.escape(step.get("name", "未命名步骤"))}</span>'
-            f'{render_attachments(step.get("attachments", []), results_dir)}'
-            f'{render_steps(step.get("steps", []), results_dir)}'
+            f'{render_attachments(step.get("attachments", []), results_dir, asset_dir)}'
+            f'{render_steps(step.get("steps", []), results_dir, asset_dir)}'
             f"</li>")
         items.append(step_html)
     return f'<ul class="steps">{"".join(items)}</ul>'
@@ -378,7 +389,7 @@ window.addEventListener('DOMContentLoaded', () => {{
 </html>"""
 
 
-def build_report(results_dir: Path, cases: list, env_items: list) -> str:
+def build_report(results_dir: Path, cases: list, env_items: list, asset_dir: Path = None) -> str:
     """组装报告 HTML 字符串"""
     if not cases:
         banner = ('<div class="empty">暂未发现 Allure 结果文件（*-result.json）。<br>'
@@ -474,12 +485,12 @@ def build_report(results_dir: Path, cases: list, env_items: list) -> str:
         detail_html = (
             f'<div class="description">{html.escape(case.get("description", ""))}</div>'
             f'{render_params(case)}'
-            f'{render_steps(case.get("steps", []), results_dir)}'
+            f'{render_steps(case.get("steps", []), results_dir, asset_dir)}'
             f'{render_failure(case)}'
             f'<b style="font-size:13px">用例附件</b>'
-            f'{render_attachments(case.get("attachments", []), results_dir)}'
+            f'{render_attachments(case.get("attachments", []), results_dir, asset_dir)}'
             f'<b style="font-size:13px">执行环境 / Fixture 附件</b>'
-            f'{render_attachments(case.get("_fixture_attachments", []), results_dir)}')
+            f'{render_attachments(case.get("_fixture_attachments", []), results_dir, asset_dir)}')
 
         rows.append(
             f'<tr{open_cls} data-status="{status_cls}" data-severity="{severity}" '
@@ -530,13 +541,19 @@ def main():
 
     env_items = load_environment(results_dir)
     cases = load_cases(results_dir)
-    report_html = build_report(results_dir, cases, env_items)
 
+    # 超大图附件目录：位于输出 HTML 旁，报告目录整体自包含
+    # （整目录交付/发布 GitHub Pages 时不依赖外部的 allure_results 原图）
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    asset_dir = output_path.parent / OVER_BUDGET_DIR_NAME
+    report_html = build_report(results_dir, cases, env_items, asset_dir)
+
     output_path.write_text(report_html, encoding="utf-8")
 
     print(f"[OK] 报告已生成: {output_path}")
     print(f"   数据源: {results_dir}")
+    if asset_dir.is_dir() and list(asset_dir.iterdir()):
+        print(f"   大图附件目录: {asset_dir}（>1.5MB 截图未内嵌，随报告目录一起交付）")
     if cases:
         from collections import Counter
         counter = Counter(c.get("status") for c in cases)

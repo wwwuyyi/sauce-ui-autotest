@@ -17,8 +17,11 @@
 | 📦 YAML 数据驱动       | 环境地址 / 浏览器 / 账号 / 期望值 / 用例数据全部外置`config/env.yaml`，代码零硬编码     |
 | 📝 分级日志            | DEBUG/INFO/WARNING/ERROR 四级，控制台 + 文件双输出，日志文件按天滚动保留 15 天          |
 | 📸 失败自动截图        | 用例失败自动截图至`reports/screenshots/`，命名 `用例名_时间戳.png`，并附件进 Allure     |
+| 🎬 失败自动录屏        | 后台线程全程周期截图（环形缓冲），**失败时合成 GIF** 附件进报告，失败现场可回放        |
 | 📊 Allure 报告         | 用例级别（blocker/critical/normal/minor）、功能模块、测试步骤、失败截图、环境信息       |
 | 🌐 多浏览器            | chrome / firefox / edge 一键切换，支持命令行参数覆盖                                    |
+| 🚀 CI 双门禁 + Pages   | push/PR 跑冒烟门禁；定时/手动跑全量并**自动发布 HTML 报告到 GitHub Pages**             |
+| 🧹 静态检查            | ruff（E/F/I 规则集）+ 依赖版本锁定，CI 与本地统一执行，提交零脏代码                    |
 
 ## 二、技术栈
 
@@ -29,7 +32,9 @@
 | Selenium      | 4.25.0 | Web 自动化（Selenium Manager 自动管理浏览器驱动） |
 | Pytest        | 8.3.4  | 测试框架                                          |
 | allure-pytest | 2.13.5 | Allure 测试报告                                   |
-| PyYAML        | 6.0.2  | YAML 数据驱动                                     |
+| PyYAML        | 6.0.3  | YAML 数据驱动                                     |
+| Pillow        | 11.1.0 | 失败录屏 GIF 合成（未安装时优雅降级为静态截图）   |
+| ruff          | 0.17.0 | 静态检查（开发工具 + CI 门禁）                    |
 
 ## 三、目录结构
 
@@ -63,7 +68,8 @@ web商城ui自动化/
 │   ├── log_util.py           # 日志工具：控制台 + 文件双输出，按天滚动
 │   ├── yaml_util.py          # YAML 读取工具：单例模式 + 文件缓存
 │   ├── allure_util.py        # Allure 工具：严重级别映射 / 附件写入
-│   └── data_util.py          # 测试数据工具：商品表查询等用例层共用函数
+│   ├── data_util.py          # 测试数据工具：商品表查询等用例层共用函数
+│   └── screen_recorder.py    # 失败录屏：后台线程周期截图 + 失败时合成 GIF
 ├── reports/
 │   ├── screenshots/          # 失败自动截图目录（运行时生成）
 │   ├── allure_results/       # 测试原始数据（Allure 标准 JSON，运行时生成）
@@ -72,9 +78,10 @@ web商城ui自动化/
 ├── scripts/
 │   └── setup_allure_path.py  # 一次性脚本：将 Allure CLI 注册到用户 PATH
 ├── docs/                     # 原始测试用例设计文档（52 条用例设计 + 执行注意事项）
-├── conftest.py               # Pytest 全局 fixture（driver 生命周期）、失败截图钩子、命令行参数
+├── conftest.py               # Pytest 全局 fixture（driver 生命周期）、失败截图+录屏钩子、命令行参数
 ├── generate_report.py        # 单文件 HTML 报告生成器（零依赖，替代 Allure CLI 渲染）
 ├── pytest.ini                # Pytest 配置：用例收集规则 / 标记 / Allure 输出目录
+├── ruff.toml                 # ruff 静态检查配置（CI 与本地统一）
 ├── requirements.txt          # 依赖清单（版本锁定）
 └── README.md
 ```
@@ -151,41 +158,37 @@ allure serve reports/allure_results
 
 **内置 HTML 报告包含**：汇总卡片（总数/通过/失败/异常/跳过/通过率/总耗时）、
 按状态（全部/通过/失败/异常/跳过）与严重级别（致命/严重/普通/次要）、功能模块的三维筛选、
-用例名关键词搜索、**完整测试步骤树**、失败信息与堆栈、**失败截图**（base64 内嵌）、
+用例名关键词搜索、**完整测试步骤树**、失败信息与堆栈、**失败截图与失败录屏 GIF**（base64 内嵌）、
 参数化数据、执行环境信息。
 
-> 报告为**单文件交付**（CSS/JS/截图全部内联），可直接发送给任何人，
-> 或上传 GitHub Pages 在线浏览；数据源 JSON 不会被修改，随时可切换回官方 Allure 渲染。
+> 报告为**目录自包含交付**（`reports/html-report/`）：一个 `index.html` + CSS/JS 与小图全部内联，
+> 极少数 >1.5MB 的截图/GIF 自动降级存放到同目录 `attachments/` 子目录。整个目录可直接打包发送、
+> 或整目录发布 GitHub Pages；数据源 JSON 不会被修改，随时可切换回官方 Allure 渲染。
 
-### 5.1 查看 CI（GitHub Actions）运行报告
+### 5.1 CI（GitHub Actions）双门禁与在线报告
 
-仓库已配置 `.github/workflows/ci.yml`：每次 push / PR 自动以无头 Chrome 运行冒烟集
-（`-m smoke`，6 条核心主链路），并把 Allure **原始数据**上传为 artifacts。
-CI 产物是标准 JSON，下载后需本地渲染成网页才能看：
+仓库配置 `.github/workflows/ci.yml` 两个 job，按触发源分工：
 
-1. 打开仓库 **Actions** 页 → 点击目标运行 → 页面底部 **Artifacts** → 下载 `allure-results`；
-2. 解压到**任意目录**（下文统一用「解压目录」代指，放哪里都行，不必放进本项目）；
-3. 渲染查看（任选其一）：
+| 触发方式                       | 执行内容                                             | 报告去向                          |
+| ------------------------------ | ---------------------------------------------------- | --------------------------------- |
+| 每次 push / PR                 | ruff 静态检查 + 冒烟集（`-m smoke`，6 条核心主链路） | Allure 原始数据 artifacts         |
+| 每天定时（工作日）+ 手动触发   | **全量 56 条** → 内置生成器渲染 HTML                  | **自动发布到 GitHub Pages 在线查看** |
 
-```bash
-# 方式一（推荐，零依赖）：内置生成器，输出单个 HTML 文件
-# 把「解压目录」替换成你自己的实际路径即可，人人路径不同属正常
-python generate_report.py --results 解压目录 --output 报告.html --open
+**在线报告地址**：`https://<你的用户名>.github.io/sauce-ui-autotest/`
 
-# 方式二：官方 Allure CLI（需本地安装 Allure + Java）
-allure serve 解压目录
-```
+访问前需一次性开启 Pages：仓库 **Settings → Pages → Build and deployment → Source**
+选择 **GitHub Actions**。之后每次定时/手动全量运行结束，报告自动更新上线；
+也可在 **Actions 页 → UI Tests → Run workflow** 随时手动触发一次全量。
 
-示例（Windows / macOS / Linux 各举一种写法）：
+冒烟门禁（push/PR）的原始结果按需下载后本地渲染：
 
 ```bash
-python generate_report.py --results "D:\Downloads\allure-results" --output report.html --open
-python generate_report.py --results ~/Downloads/allure-results --output report.html --open
-python generate_report.py --results /home/user/Downloads/allure-results --output report.html --open
+# Actions 页 → 目标运行 → Artifacts → 下载 allure-results 并解压后：
+python generate_report.py --results "D:\Downloads\allure-results" --output report.html --open   # Windows
+python generate_report.py --results ~/Downloads/allure-results --output report.html --open      # macOS / Linux
 ```
 
-> 注意：CI 绿灯只代表冒烟集（6 条）通过；全量 56 条请本地执行 `python -m pytest`，
-> 报告生成方式与上文 5 节完全相同。
+> 注意：CI 冒烟绿灯只代表 6 条主链路通过；全量的实时结果直接看 GitHub Pages 报告即可。
 
 ## 五、命令行参数
 
@@ -277,6 +280,42 @@ function 级隔离]
     F7[page_factory
 任意页面按需组装] -.-> F2
 ```
+
+### 0.1 选型说明：为什么是 Selenium 4 而不是 Playwright / Cypress（面试必问）
+
+**结论先行**：选型是「岗位方向 × 展示框架搭建能力 × 生态成熟度」三者的权衡。
+
+1. **技术栈对齐岗位方向**：求职方向为 Python 系（测试开发/后端）时，Selenium + Pytest
+   是团队最通用的组合，Python 面试官能逐行追问你代码里的实现；引入 Playwright 会把
+   "期中换框架"的疑问带到面试里，得不偿失。
+
+2. **刻意选择更"裸"的工具，展示框架工程能力**：Playwright 开箱自带自动等待、自动重试、
+   录屏与测试编排——好用，但"框架层"的活大多不用自己做；Selenium 只给 WebDriver 原语，
+   于是显式等待策略、BasePage 50+ 原子能力、失败治理（截图/录屏 GIF/重试）、YAML 数据驱动、
+   日志降噪、报告生成器全部**从零搭建**——这部分恰恰是简历要证明的"从 0 到 1 的框架设计能力"。
+
+3. **W3C 标准与驱动管理成熟**：Selenium 是 W3C WebDriver 协议的标准实现，
+   4.6+ 的 Selenium Manager 自动解决 driver 下载/版本匹配；Cypress 运行在浏览器内部
+   （JS 独占、跨域/多标签受限），无法对齐本框架多浏览器、多语言的技术栈。
+
+> **反向追问的答法**——"自动等待不是比显式等待先进吗？"：
+> 自动等待把等待语义藏在框架内部，等待时长不可控、失败堆栈不指向业务；
+> 本框架每次等待都对应一个明确的业务语义（等待按钮可点击 / 等待 URL 跳转 / 等待文本变化），
+> 超时中文报错 + 截图 + 录屏直接定位失败原因，这正是"全项目禁用隐式等待/time.sleep"一节的动机。
+
+### 0.2 实测量化数据（简历可引用的"硬数字"）
+
+| 指标 | 数值 | 说明 |
+| ---- | ---- | ---- |
+| 用例规模 | 8 模块 52 条设计用例 → pytest 收集 **56 项** | 参数化展开，逐条可追溯设计文档编号 |
+| 全量执行时长 | **12 分 48 秒**（约 13.7 秒/条） | 每条独立浏览器实例 + 真实 UI 登录 |
+| 通过率 | **56/56 = 100%** | Windows 10 + Chrome，本机全量实测 2026-10-14 |
+| CI 门禁 | 冒烟 6 条（每次 push/PR）+ 全量 56 条（每日定时） | GitHub Actions 无头 Chrome + Pages 自动出报告 |
+
+> **面试用话术**：全量 56 条 13 分钟内跑完、当轮 100% 通过；稳定性由四道防线共同保证——
+> function 级 driver 隔离（用例互不污染）、全显式等待（禁 sleep/隐式等待）、
+> 状态反转等待（加购后等按钮变 Remove）、失败自动重试（点击未生效自动补点）——
+> 按这个顺序复述，就是"稳定性工程"的完整答案。
 
 ### 1. 分层架构（Page Object）
 
@@ -382,9 +421,13 @@ Selenium Manager 会自动下载与本地浏览器匹配的驱动。若报 `Sess
 <details>
 <summary><b>Q2：如何在 CI 中运行？CI 跑通后怎么拿报告？</b></summary>
 
-本仓库已内置 **GitHub Actions** 工作流（`.github/workflows/ci.yml`）：push / PR 触发，
-无头 Chrome 运行冒烟集（`-m smoke`，6 条核心主链路），并将 `reports/allure_results/`
-原始数据上传为 artifacts，报告查看步骤见上文 **四、5.1 查看 CI（GitHub Actions）运行报告**。
+本仓库已内置 **GitHub Actions** 工作流（`.github/workflows/ci.yml`）双门禁：
+
+- push / PR：ruff 静态检查 + 无头 Chrome 冒烟集（`-m smoke`，6 条核心主链路），
+  原始数据上传 artifacts；
+- 定时（工作日）/ 手动触发：全量 56 条 → 内置生成器渲染 HTML → **自动发布 GitHub Pages**。
+
+详见上文 **四、5.1 CI（GitHub Actions）双门禁与在线报告**（含 Pages 一次性开启步骤）。
 
 Jenkins / GitLab CI 接入同理：
 
@@ -413,7 +456,8 @@ YAML 对缩进敏感。新增/修改 `env.yaml` 数据后，可先执行 `python
 <summary><b>Q5：没有安装 Allure CLI / Java，怎么查看报告？</b></summary>
 
 使用内置生成器即可：`python generate_report.py`（零依赖，Python 标准库解析
-`reports/allure_results/` 下的 JSON 并渲染为单文件 HTML），完全替代本地 Allure CLI。
+`reports/allure_results/` 下的 JSON 并渲染为单个 HTML + 附件的自包含目录），
+完全替代本地 Allure CLI。
 
 </details>
 
