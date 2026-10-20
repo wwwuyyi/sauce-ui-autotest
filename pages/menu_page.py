@@ -19,6 +19,7 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
 from base.base_page import BasePage
+from pages.login_page import LoginPage
 
 logger = logging.getLogger(__name__)
 
@@ -139,17 +140,24 @@ class MenuPage(BasePage):
         """点击 Logout（退出登录回到登录页）
 
         健壮性：公共演示站偶发"点击后导航无响应"（点击成功但回登录页的跳转迟迟不生效，
-        两轮 CI 均在该处超时）。点击后等待 Logout 菜单项从页面消失（跳转生效标志），
-        超时且菜单项仍在时重试点击（默认 1 次）。退出是幂等操作，重复点击无副作用。
+        两轮 CI 均在该处超时）。点击后等待【登录页 user-name 输入框可见】作为跳转生效的
+        权威标志；原先以"Logout 菜单项消失"为准存在假阳性——点击后侧边栏收起动画即可让
+        Logout 移出画布（不可见判定即成立），但页面仍停留在商品页，登出校验形同虚设。
+        超时且未回到登录页时重试点击（默认 1 次）。退出是幂等操作，重复点击无副作用。
         """
         for attempt in range(retries + 1):
             self.click(self.LOGOUT)
             try:
-                self.wait_element_disappear(self.LOGOUT)
+                # 登录页 user-name 输入框可见 = 已成功跳转回登录页（唯一权威校验）
+                self.find_element(LoginPage.USERNAME_INPUT)
                 return
             except TimeoutException:
-                if attempt < retries and self.get_element_count_immediate(self.LOGOUT) > 0:
+                # 仍停留在商品页（菜单容器还在 DOM）时才重试：首次点击后菜单已自动收起
+                # （Logout 仍在 DOM 但移出画布不可点击），需重新展开菜单再补点
+                if attempt < retries and self.get_element_count_immediate(self.MENU_WRAP) > 0:
                     logger.warning("点击 Logout 后未跳转出登录态（站点导航无响应），第 %d 次重试点击",
                                    attempt + 1)
+                    if self.is_menu_closed():
+                        self.open_menu()
                     continue
                 raise

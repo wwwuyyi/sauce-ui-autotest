@@ -113,6 +113,11 @@ def driver(request, config):
             options = webdriver.ChromeOptions()
             if headless:
                 options.add_argument("--headless=new")  # Chrome 109+ 官方无头模式参数
+                # CI 容器必备参数：GitHub runner 以 root 运行、无用户级沙箱，缺 --no-sandbox
+                # 无法启动 Chrome；容器 /dev/shm 默认仅 64MB，--disable-dev-shm-usage 让渲染
+                # 内存改走 /tmp，解决云端 runner 内存不足导致页面渲染卡住、点击失效的连锁超时
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
             if browser_conf.get("window_size"):
                 options.add_argument(f"--window-size={browser_conf['window_size']}")
             driver_obj = webdriver.Chrome(options=options)  # Selenium 4 标准构造方式
