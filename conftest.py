@@ -40,6 +40,14 @@ logger = logging.getLogger(__name__)
 # 会话级读取环境配置（单例 YamlUtil，全会话共享同一份，命令行参数默认值也来源于此）
 CONFIG = YamlUtil().read_yaml(CONFIG_PATH)
 
+# 环境变量覆盖（CI 稳定性开关；本地不设环境变量时行为与 env.yaml 完全一致）。
+# YamlUtil 缓存返回的是同一份 dict 对象，此处修改对全部 fixture 与用例模块生效：
+#   WAIT_TIMEOUT=20   -> 显式等待默认超时上浮（CI runner 无 GPU + 公共演示站抖动，本地保持 10s）
+#   RECORDING=false   -> 关闭失败录屏后台线程（详见 driver fixture 内注释）
+_wait_timeout_env = (os.environ.get("WAIT_TIMEOUT") or "").strip()
+if _wait_timeout_env.isdigit():
+    CONFIG["timeout"]["explicit_wait"] = int(_wait_timeout_env)
+
 
 def pytest_addoption(parser):
     """注册自定义命令行参数：--browser 选择浏览器类型"""
@@ -155,7 +163,13 @@ def driver(request, config):
         max_frames=recording_conf.get("max_frames", 40),
         gif_width=recording_conf.get("gif_width", 640),
     )
-    if recording_conf.get("enabled", True):
+    # CI 关闭录屏（RECORDING=false）：后台线程每 0.5s 截一张全屏图，会与主线程的等待轮询
+    # 争抢同一 chromedriver 连接的执行权——CI 日志中的 urllib3
+    # "Connection pool is full, discarding connection: localhost" 警告即来自该并发，
+    # 并整体拖慢命令响应。CI 无回看录屏需求，失败现场由静态截图覆盖；
+    # 不启动线程时环形缓冲 0 帧，失败钩子的 GIF 合成自然降级，无需额外分支。
+    recording_env = (os.environ.get("RECORDING") or "").strip().lower()
+    if recording_conf.get("enabled", True) and recording_env != "false":
         recorder.start()
     request.node._screen_recorder = recorder  # 挂到节点上供失败钩子取用
 

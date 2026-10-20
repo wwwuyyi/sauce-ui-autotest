@@ -31,6 +31,7 @@
 | Python        | 3.10+  | 开发语言                                          |
 | Selenium      | 4.25.0 | Web 自动化（Selenium Manager 自动管理浏览器驱动） |
 | Pytest        | 8.3.4  | 测试框架                                          |
+| pytest-rerunfailures | 14.0 | 失败自动重跑（CI 吸收公共演示站偶发抖动）    |
 | allure-pytest | 2.13.5 | Allure 测试报告                                   |
 | PyYAML        | 6.0.3  | YAML 数据驱动                                     |
 | Pillow        | 11.1.0 | 失败录屏 GIF 合成（未安装时优雅降级为静态截图）   |
@@ -179,6 +180,19 @@ allure serve reports/allure_results
 访问前需一次性开启 Pages：仓库 **Settings → Pages → Build and deployment → Source**
 选择 **GitHub Actions**。之后每次定时/手动全量运行结束，报告自动更新上线；
 也可在 **Actions 页 → UI Tests → Run workflow** 随时手动触发一次全量。
+（若 `deploy-pages` 步骤报 404 "Ensure GitHub Pages has been enabled"，
+即表示尚未完成上述开启步骤——这是仓库设置问题，与代码无关。）
+
+CI 运行环境的框架稳定性开关（工作流内置，本地设置同名环境变量同样生效）：
+
+| 环境变量       | 取值              | 作用 |
+| -------------- | ----------------- | ---- |
+| `HEADLESS`     | `true` / `false`  | 强制无头模式（GitHub runner 无显示器） |
+| `RECORDING`    | `false`           | 关闭失败录屏后台线程：0.5s/帧的全屏截图与测试主线程争抢同一 chromedriver 连接（产生 urllib3 连接池告警并拖慢命令响应），CI 场景失败现场由静态截图覆盖 |
+| `WAIT_TIMEOUT` | 数字（如 `20`）   | 覆盖 `env.yaml` 的 `timeout.explicit_wait`，上浮显式等待预算 |
+
+CI 全量与冒烟均附加 `--reruns 1 --reruns-delay 3`：公共演示站偶发抖动导致的瞬时超时
+自动重跑一次（每条用例独立浏览器实例，重跑无状态残留，不会掩盖确定性失败）。
 
 冒烟门禁（push/PR）的原始结果按需下载后本地渲染：
 
