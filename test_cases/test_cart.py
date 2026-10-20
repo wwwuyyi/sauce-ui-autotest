@@ -40,10 +40,15 @@ def _prepare_cart(inventory_page, page_factory):
             inventory_page.wait_badge_text(str(index))
             assert inventory_page.get_badge_text() == str(index), (
                 f"加购 {slug} 后购物车角标应为 {index}（添加未生效，后续购物车断言失真）")
+        # 最终确认：角标数量 > 0（角标存在 = 商品确实入车），添加未生效则禁止进入购物车页
+        assert not inventory_page.is_badge_absent(), "购物车角标不存在：商品添加未生效，禁止进入购物车页"
     with allure.step("前置业务流程：确认商品添加成功后进入购物车页面"):
         inventory_page.open_cart()
         cart_page = page_factory(CartPage)
         cart_page.wait_cart_page_loaded()
+    with allure.step("前置业务流程：校验购物车页内删除按钮已就位（含 sauce-labs-bike-light）"):
+        for slug in CONFIG["checkout"]["default_item_slugs"]:
+            cart_page.find_element(cart_page.remove_button(slug))
     return cart_page
 
 

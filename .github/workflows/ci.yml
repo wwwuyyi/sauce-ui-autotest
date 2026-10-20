@@ -7,7 +7,7 @@
 #   HEADLESS=true            -> 强制无头模式（GitHub runner 无显示器）
 #   RECORDING=false          -> 关闭失败录屏线程（0.5s/帧截图与主线程争抢 chromedriver，
 #                               产生连接池警告并拖慢命令响应，CI 不需要录屏 GIF）
-#   WAIT_TIMEOUT=20          -> 显式等待默认超时上浮（公共演示站 + 无 GPU runner 响应偏慢）
+#   WAIT_TIMEOUT=30          -> 显式等待默认超时上浮（公共演示站 + 无 GPU runner 响应偏慢）
 #   命令附 --reruns 1        -> 站点偶发抖动时失败自动重跑一次（pytest-rerunfailures）
 #   EDGE_DRIVER_PATH 未设置  -> Selenium Manager 自动下载 chromedriver
 # （runner 自带 Chrome；仓库内无任何本机地址/账号/驱动路径信息）
@@ -43,7 +43,7 @@ jobs:
           ruff check .
       - name: 运行冒烟测试（无头 Chrome）
         run: python -m pytest -m smoke --browser=chrome --reruns 1 --reruns-delay 3
-        env: { HEADLESS: "true", RECORDING: "false", WAIT_TIMEOUT: "20" }
+        env: { HEADLESS: "true", RECORDING: "false", WAIT_TIMEOUT: "30" }
       - name: 上传 Allure 原始结果（无论成败均可取回排障）
         if: always()
         uses: actions/upload-artifact@v4
@@ -65,7 +65,7 @@ jobs:
       - run: pip install -r requirements.txt
       - name: 运行全量测试（无头 Chrome，56 条）
         run: python -m pytest --browser=chrome --reruns 1 --reruns-delay 3
-        env: { HEADLESS: "true", RECORDING: "false", WAIT_TIMEOUT: "20" }
+        env: { HEADLESS: "true", RECORDING: "false", WAIT_TIMEOUT: "30" }
       # 测试即便有失败也照常出报告并发布——报告的价值就是呈现失败现场
       - name: 内置生成器渲染单文件 HTML 报告
         if: always()

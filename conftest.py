@@ -43,11 +43,15 @@ CONFIG = YamlUtil().read_yaml(CONFIG_PATH)
 
 # 环境变量覆盖（CI 稳定性开关；本地不设环境变量时行为与 env.yaml 完全一致）。
 # YamlUtil 缓存返回的是同一份 dict 对象，此处修改对全部 fixture 与用例模块生效：
-#   WAIT_TIMEOUT=20   -> 显式等待默认超时上浮（CI runner 无 GPU + 公共演示站抖动，本地保持 10s）
+#   WAIT_TIMEOUT=30   -> 显式等待默认超时上浮（CI runner 无 GPU + 公共演示站抖动，本地保持 10s）
 #   RECORDING=false   -> 关闭失败录屏后台线程（详见 driver fixture 内注释）
 _wait_timeout_env = (os.environ.get("WAIT_TIMEOUT") or "").strip()
 if _wait_timeout_env.isdigit():
     CONFIG["timeout"]["explicit_wait"] = int(_wait_timeout_env)
+elif os.environ.get("CI"):
+    # 只在 CI 环境生效的兜底默认：未显式传 WAIT_TIMEOUT 时全局显式等待上浮到 30s
+    # （GitHub Actions 等 CI 平台恒设 CI=true；本地/Windows 运行不受影响，仍取 env.yaml 的 10s）
+    CONFIG["timeout"]["explicit_wait"] = 30
 
 
 def pytest_addoption(parser):
