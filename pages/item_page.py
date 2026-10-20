@@ -12,6 +12,7 @@ item_page.py —— 商品详情页对象（Page 对象层）
 """
 import logging
 
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
 from base.base_page import BasePage
@@ -81,15 +82,37 @@ class ItemPage(BasePage):
 
     # ===================== 业务方法：加购 / 移除 / 返回 =====================
 
-    def add_to_cart(self) -> None:
-        """详情页加购并等待按钮切换为 Remove（按钮为通用 data-test，无需 slug）"""
-        self.click(self.ADD_BTN)
-        self.find_element(self.REMOVE_BTN)
+    def add_to_cart(self, retries: int = 1) -> None:
+        """详情页加购并等待按钮切换为 Remove（按钮为通用 data-test，无需 slug）
 
-    def remove_from_cart(self) -> None:
-        """详情页移除并等待按钮恢复为加购"""
-        self.click(self.REMOVE_BTN)
-        self.find_element(self.ADD_BTN)
+        健壮性：与 InventoryPage.add_to_cart 同款兜底——偶发"点击后按钮未切换"
+        （点击未生效/状态未翻转）。检测到加购按钮仍留在 DOM 时自动重试点击（默认 1 次）。
+        """
+        for attempt in range(retries + 1):
+            self.click(self.ADD_BTN)
+            try:
+                self.find_element(self.REMOVE_BTN)
+                return
+            except TimeoutException:
+                if attempt < retries and not self.is_add_button_absent():
+                    logger.warning("详情页加购后按钮未切换（点击疑似未生效），第 %d 次重试点击",
+                                   attempt + 1)
+                    continue
+                raise
+
+    def remove_from_cart(self, retries: int = 1) -> None:
+        """详情页移除并等待按钮恢复为加购（按钮未恢复时自动重试点击，同加购健壮性）"""
+        for attempt in range(retries + 1):
+            self.click(self.REMOVE_BTN)
+            try:
+                self.find_element(self.ADD_BTN)
+                return
+            except TimeoutException:
+                if attempt < retries and not self.is_element_present(self.REMOVE_BTN, timeout=2):
+                    logger.warning("详情页移除后按钮未恢复（点击疑似未生效），第 %d 次重试点击",
+                                   attempt + 1)
+                    continue
+                raise
 
     def is_add_button_absent(self) -> bool:
         """加购按钮是否已不在 DOM"""

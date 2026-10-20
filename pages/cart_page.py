@@ -10,6 +10,7 @@ cart_page.py —— 购物车页对象（Page 对象层）
 """
 import logging
 
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
 from base.base_page import BasePage
@@ -91,6 +92,21 @@ class CartPage(BasePage):
         """点击继续购物按钮（返回商品列表页）"""
         self.click(self.CONTINUE_SHOPPING)
 
-    def click_checkout(self) -> None:
-        """点击去结算按钮（进入结算第一步）"""
-        self.click(self.CHECKOUT)
+    def click_checkout(self, retries: int = 1) -> None:
+        """点击去结算按钮（进入结算第一步）
+
+        健壮性：公共演示站偶发"点击后导航无响应"（点击成功但页面迟迟不跳转，
+        与 InventoryPage.add_to_cart 的"点击未生效自动补点"同类站点抖动）。
+        点击后等待结算按钮从页面消失（跳转生效标志），超时且按钮仍在时重试点击（默认 1 次）。
+        """
+        for attempt in range(retries + 1):
+            self.click(self.CHECKOUT)
+            try:
+                self.wait_element_disappear(self.CHECKOUT)
+                return
+            except TimeoutException:
+                if attempt < retries and self.get_element_count_immediate(self.CHECKOUT) > 0:
+                    logger.warning("点击 Checkout 后未离开购物车页（站点导航无响应），第 %d 次重试点击",
+                                   attempt + 1)
+                    continue
+                raise

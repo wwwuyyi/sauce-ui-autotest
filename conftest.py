@@ -21,6 +21,7 @@ from pathlib import Path
 import allure
 import pytest
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 
 from utils.log_util import LogUtil
 from utils.screen_recorder import ScreenRecorder
@@ -240,12 +241,22 @@ def cart_page(inventory_page, page_factory, config):
 
 
 @pytest.fixture(scope="function")
-def checkout_step_one_page(cart_page, page_factory):
-    """结算第一步 fixture：预置购物车后进入结算信息表单页，返回 CheckoutPage"""
+def checkout_step_one_page(cart_page, page_factory, config):
+    """结算第一步 fixture：预置购物车后进入结算信息表单页，返回 CheckoutPage
+
+    健壮性：公共演示站偶发"点击 Checkout 后导航无响应"（点击成功但迟迟不跳转）。
+    CartPage.click_checkout 已内置重试点击；此处再补最终兜底——直接打开结算第一步
+    URL（与点击链接等价，登录态/购物车态在服务端会话中），这是本 fixture 的最后防线。
+    """
     from pages.checkout_page import CheckoutPage
-    cart_page.click_checkout()
     page = page_factory(CheckoutPage)
-    page.wait_step_one_loaded()
+    try:
+        cart_page.click_checkout()
+        page.wait_step_one_loaded()
+    except TimeoutException:
+        logger.warning("点击 Checkout 未进入结算表单页（站点导航无响应），改用 URL 直达兜底")
+        page.open_url(config["urls"]["checkout_step_one"])
+        page.wait_step_one_loaded()
     return page
 
 

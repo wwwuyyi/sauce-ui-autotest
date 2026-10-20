@@ -135,6 +135,21 @@ class MenuPage(BasePage):
         """点击 Reset App State（重置购物车与按钮状态）"""
         self.click(self.RESET)
 
-    def click_logout(self) -> None:
-        """点击 Logout（退出登录回到登录页）"""
-        self.click(self.LOGOUT)
+    def click_logout(self, retries: int = 1) -> None:
+        """点击 Logout（退出登录回到登录页）
+
+        健壮性：公共演示站偶发"点击后导航无响应"（点击成功但回登录页的跳转迟迟不生效，
+        两轮 CI 均在该处超时）。点击后等待 Logout 菜单项从页面消失（跳转生效标志），
+        超时且菜单项仍在时重试点击（默认 1 次）。退出是幂等操作，重复点击无副作用。
+        """
+        for attempt in range(retries + 1):
+            self.click(self.LOGOUT)
+            try:
+                self.wait_element_disappear(self.LOGOUT)
+                return
+            except TimeoutException:
+                if attempt < retries and self.get_element_count_immediate(self.LOGOUT) > 0:
+                    logger.warning("点击 Logout 后未跳转出登录态（站点导航无响应），第 %d 次重试点击",
+                                   attempt + 1)
+                    continue
+                raise

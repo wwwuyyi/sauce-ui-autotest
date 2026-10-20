@@ -260,9 +260,26 @@ class InventoryPage(BasePage):
 
     # ===================== 业务方法：入口跳转与布局坐标 =====================
 
-    def click_product_link(self, product_id: int) -> None:
-        """点击商品标题进入详情页"""
-        self.click(self.product_title_link(product_id))
+    def click_product_link(self, product_id: int, retries: int = 1) -> None:
+        """点击商品标题进入详情页
+
+        健壮性：与 Checkout/Logout 同类——公共演示站偶发"点击后导航无响应"
+        （点击成功但详情页迟迟不加载，CI 首轮多处 `.inventory_details_container`
+        等待超时即源于此）。点击后等待标题链接从页面消失（跳转生效标志），
+        超时且链接仍在时重试点击（默认 1 次）。
+        """
+        for attempt in range(retries + 1):
+            self.click(self.product_title_link(product_id))
+            try:
+                self.wait_element_disappear(self.product_title_link(product_id))
+                return
+            except TimeoutException:
+                if attempt < retries and self.get_element_count_immediate(
+                        self.product_title_link(product_id)) > 0:
+                    logger.warning("点击商品[%s]后未离开列表页（站点导航无响应），第 %d 次重试点击",
+                                   product_id, attempt + 1)
+                    continue
+                raise
 
     def open_cart(self) -> None:
         """点击购物车图标进入购物车页"""
