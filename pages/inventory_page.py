@@ -146,9 +146,10 @@ class InventoryPage(BasePage):
     def add_to_cart(self, slug: str, retries: int = 1) -> None:
         """加购单个商品并等待按钮切换为 Remove（功能正常站点）
 
-        健壮性：偶发"点击后按钮未切换"（点击未落到目标/状态未翻转，等待 10s
-        仍无 Remove 按钮），此时加购按钮仍留在 DOM。检测到该特征自动重试点击
-        （默认 1 次），避免购物车预置等前置链路被瞬时抖动击穿。
+        健壮性：偶发"点击后按钮未切换"，按两种成因分别兜底：
+        1. 已入车但商品卡片未重渲染（新版 React 站点状态树偶发不同步）：
+           购物车状态存于 localStorage，刷新页面即可取回并恢复按钮态，刷新后复核；
+        2. 点击被吞（未入车）：加购按钮仍在 DOM 时重新点击（默认 1 次）。
         """
         for attempt in range(retries + 1):
             self.click(self.add_button(slug))
@@ -156,9 +157,16 @@ class InventoryPage(BasePage):
                 self.find_element(self.remove_button(slug))
                 return
             except TimeoutException:
+                # 兜底一：刷新页面后复核（覆盖"已入车但按钮未重渲染"的前端不同步）
+                logger.warning("加购[%s]后按钮未切换，刷新页面重渲染后复核", slug)
+                self.refresh()
+                self.wait_inventory_loaded()
+                if self.is_element_present(self.remove_button(slug), timeout=3):
+                    logger.info("刷新后加购[%s]状态已恢复", slug)
+                    return
+                # 兜底二：仍未入车（点击被吞），加购按钮仍在时重试点击
                 if attempt < retries and not self.is_add_button_absent(slug):
-                    logger.warning("加购[%s]后按钮未切换（点击疑似未生效），第 %d 次重试点击",
-                                   slug, attempt + 1)
+                    logger.warning("加购[%s]初判未生效，第 %d 次重试点击", slug, attempt + 1)
                     continue
                 raise
 
@@ -281,9 +289,29 @@ class InventoryPage(BasePage):
                     continue
                 raise
 
-    def open_cart(self) -> None:
-        """点击购物车图标进入购物车页"""
-        self.click(self.CART_LINK)
+    def open_cart(self, retries: int = 1, fallback_url: str = None) -> None:
+        """点击购物车图标进入购物车页（URL 进入购物车页为成功标志）
+
+        健壮性：新版站点为 React SPA，购物车图标只绑定客户端路由 push，偶发
+        "点击后路由不跳转"（页面仍停留商品页，与 Add/Checkout 同类站点抖动）。
+        超时先重试点击（默认 1 次）；仍失败且提供 fallback_url 时直接打开购物车
+        URL 兜底——购物车状态存于 localStorage，URL 直达与点击导航完全等价。
+        """
+        for attempt in range(retries + 1):
+            self.click(self.CART_LINK)
+            try:
+                self.wait_url_contains("/cart.html", timeout=10)
+                return
+            except TimeoutException:
+                if attempt < retries:
+                    logger.warning("点击购物车图标后未跳转（站点 SPA 路由无响应），第 %d 次重试点击",
+                                   attempt + 1)
+                    continue
+                if fallback_url:
+                    logger.warning("重试用尽仍未跳转，改用 URL 直达购物车页: %s", fallback_url)
+                    self.open_url(fallback_url)
+                    return
+                raise
 
     def get_shopping_cart_rect(self) -> dict:
         """购物车图标位置矩形（visual_user 布局偏移探针基线采集用）"""

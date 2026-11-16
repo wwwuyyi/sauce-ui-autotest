@@ -40,7 +40,6 @@ class MenuPage(BasePage):
     ABOUT = (By.CSS_SELECTOR, "[data-test='about-sidebar-link']")          # About（外链新窗口）
     RESET = (By.CSS_SELECTOR, "[data-test='reset-sidebar-link']")          # Reset App State
     LOGOUT = (By.CSS_SELECTOR, "[data-test='logout-sidebar-link']")        # Logout
-    LOGIN_URL = "https://www.saucedemo.com/"    # 登录页 URL（Logout 兜底直开目标，与 config/env.yaml base_url 一致）
 
     # ===================== 业务方法 =====================
 
@@ -137,22 +136,25 @@ class MenuPage(BasePage):
         """点击 Reset App State（重置购物车与按钮状态）"""
         self.click(self.RESET)
 
-    def click_logout(self, retries: int = 1) -> None:
+    def click_logout(self, retries: int = 1, fallback_url: str = None) -> None:
         """点击 Logout（退出登录回到登录页）
 
         健壮性：公共演示站偶发"点击后导航无响应"；CI headless 环境下站点前端 JS 卡死时
         点击 Logout 根本不会触发跳转。点击后等待【登录页 user-name 输入框可见】作为跳转
         生效的权威标志；超时且仍停留在商品页时重试点击（默认 1 次，保留原预警日志）。
-        重试耗尽仍未跳转时兜底：删除全部 Cookie + 强制打开登录页 URL（HTTP 直达，绕开
-        卡死的页面 JS 导航依赖），再等待 user-name 可见。退出是幂等操作，兜底无副作用。
+        重试耗尽仍未跳转且调用方提供 fallback_url 时兜底：删除全部 Cookie + 强制打开
+        登录页 URL（HTTP 直达，绕开卡死的页面 JS 导航依赖），再等待 user-name 可见。
+        退出是幂等操作，兜底无副作用；未提供 fallback_url 时原样抛出最后一次超时。
         """
+        last_exc = None
         for attempt in range(retries + 1):
             self.click(self.LOGOUT)
             try:
                 # 主路径：登录页 user-name 输入框可见 = 已成功跳转回登录页（唯一权威校验）
                 self.find_element(LoginPage.USERNAME_INPUT)
                 return
-            except TimeoutException:
+            except TimeoutException as exc:
+                last_exc = exc
                 # 仍停留在商品页（菜单容器还在 DOM）时才重试点击：首次点击后菜单已自动收起
                 # （Logout 仍在 DOM 但移出画布不可点击），需重新展开菜单再补点
                 if attempt < retries and self.get_element_count_immediate(self.MENU_WRAP) > 0:
@@ -161,13 +163,15 @@ class MenuPage(BasePage):
                     if self.is_menu_closed():
                         self.open_menu()
                     continue
-                # 重试用尽或 Logout 已不可点击：不再抛超时，跳出循环执行兜底
+                # 重试用尽或 Logout 已不可点击：跳出循环
                 break
 
-        # 兜底方案：CI headless 前端 JS 卡死时点击 Logout 永不跳转，删除会话 Cookie 后
-        # 直开登录页 URL，强制导航回登录页；兜底跳转完成后再次等待 user-name 输入框可见
+        if not fallback_url:
+            raise last_exc
+
+        # 兜底方案：删除会话 Cookie 后直开登录页 URL，强制导航回登录页，再等待输入框可见
         logger.warning("点击 Logout 重试用尽仍未回到登录页（站点 JS 卡死/导航无响应），"
-                       "兜底：清除 Cookie 并直达登录页 URL")
+                       "兜底：清除 Cookie 并直达登录页 URL: %s", fallback_url)
         self.delete_all_cookies()
-        self.open_url(self.LOGIN_URL)
+        self.open_url(fallback_url)
         self.find_element(LoginPage.USERNAME_INPUT)

@@ -54,12 +54,20 @@ def _prepare_cart(inventory_page, page_factory):
         # 最终确认：角标数量 > 0（角标存在 = 商品确实入车），添加未生效则禁止进入购物车页
         assert not inventory_page.is_badge_absent(), "购物车角标不存在：商品添加未生效，禁止进入购物车页"
     with allure.step("前置业务流程：确认商品添加成功后进入购物车页面"):
-        inventory_page.open_cart()
+        inventory_page.open_cart(fallback_url=CO_URLS["cart"])
         cart_page = page_factory(CartPage)
         cart_page.wait_cart_page_loaded()
     with allure.step("前置业务流程：校验购物车页内删除按钮已就位（含 sauce-labs-bike-light）"):
-        for slug in CONFIG["checkout"]["default_item_slugs"]:
-            cart_page.find_element(cart_page.remove_button(slug))
+        try:
+            for slug in CONFIG["checkout"]["default_item_slugs"]:
+                cart_page.find_element(cart_page.remove_button(slug), timeout=10)
+        except TimeoutException:
+            # 新版 React 站点偶发"已跳转购物车页但商品行未渲染"：刷新后从 localStorage 恢复状态
+            logger.warning("购物车商品行未渲染（站点前端状态未刷新），刷新页面后复核")
+            cart_page.refresh()
+            cart_page.wait_cart_page_loaded()
+            for slug in CONFIG["checkout"]["default_item_slugs"]:
+                cart_page.find_element(cart_page.remove_button(slug), timeout=10)
     return cart_page
 
 

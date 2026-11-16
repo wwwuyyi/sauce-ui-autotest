@@ -52,7 +52,7 @@ def _logout(login_page, page_factory):
     """通过侧边栏菜单退出登录，返回登录页"""
     menu = page_factory(MenuPage)
     menu.open_menu()
-    menu.click_logout()
+    menu.click_logout(fallback_url=CONFIG["base_url"])
     login_page.wait_url_to_be(CONFIG["base_url"])
     assert login_page.is_login_form_displayed(), "退出登录后未回到登录页"
     return login_page

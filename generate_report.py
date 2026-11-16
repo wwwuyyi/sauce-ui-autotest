@@ -73,13 +73,26 @@ def has_attachments(stage: dict) -> bool:
 
 
 def load_cases(results_dir: Path) -> list:
-    """解析全部 *-result.json，并合并 container 中的 fixture 级附件"""
+    """解析全部 *-result.json，并合并 container 中的 fixture 级附件
+
+    去重：pytest-rerunfailures 每次重跑都会写一份 result.json（同一用例出现多条），
+    这里按 testCaseId 只保留最后一次尝试的结果，避免报告条目数量虚高、
+    也避免"重跑通过但前一次失败"同时出现造成的误读。
+    """
     cases = []
     for f in sorted(results_dir.glob("*-result.json")):
         try:
             cases.append(json.loads(f.read_text(encoding="utf-8")))
         except (json.JSONDecodeError, OSError):
             continue
+
+    latest = {}
+    for case in cases:
+        key = case.get("testCaseId") or case.get("historyId") or case.get("uuid")
+        prev = latest.get(key)
+        if prev is None or (case.get("start") or 0) >= (prev.get("start") or 0):
+            latest[key] = case
+    cases = list(latest.values())
     cases.sort(key=lambda d: d.get("start") or 0)
 
     # 合并 container 附件：container.children 里的 uuid 对应 result，

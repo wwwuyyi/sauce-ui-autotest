@@ -20,7 +20,7 @@
 | 🎬 失败自动录屏        | 后台线程全程周期截图（环形缓冲），**失败时合成 GIF** 附件进报告，失败现场可回放        |
 | 📊 Allure 报告         | 用例级别（blocker/critical/normal/minor）、功能模块、测试步骤、失败截图、环境信息       |
 | 🌐 多浏览器            | chrome / firefox / edge 一键切换，支持命令行参数覆盖                                    |
-| 🚀 CI 双门禁 + Pages   | push/PR 跑冒烟门禁；定时/手动跑全量并**自动发布 HTML 报告到 GitHub Pages**             |
+| 🚀 CI 双门禁 + Pages   | push/PR 在**本地托管站点**上跑冒烟门禁（确定性）；定时/手动对线上站点跑全量并**自动发布 HTML 报告到 GitHub Pages** |
 | 🧹 静态检查            | ruff（E/F/I 规则集）+ 依赖版本锁定，CI 与本地统一执行，提交零脏代码                    |
 
 ## 二、技术栈
@@ -172,8 +172,8 @@ allure serve reports/allure_results
 
 | 触发方式                       | 执行内容                                             | 报告去向                          |
 | ------------------------------ | ---------------------------------------------------- | --------------------------------- |
-| 每次 push / PR                 | ruff 静态检查 + 冒烟集（`-m smoke`，6 条核心主链路） | Allure 原始数据 artifacts         |
-| 每天定时（工作日）+ 手动触发   | **全量 56 条** → 内置生成器渲染 HTML                  | **自动发布到 GitHub Pages 在线查看** |
+| 每次 push / PR                 | ruff 静态检查 + 冒烟集（`-m smoke`，6 条核心主链路，**跑本地托管站点**） | Allure 原始数据 artifacts         |
+| 每天定时（工作日）+ 手动触发   | **全量 56 条（线上 saucedemo 监控）** → 内置生成器渲染 HTML | **自动发布到 GitHub Pages 在线查看** |
 
 **在线报告地址**：`https://<你的用户名>.github.io/sauce-ui-autotest/`
 
@@ -183,6 +183,25 @@ allure serve reports/allure_results
 （若 `deploy-pages` 步骤报 404 "Ensure GitHub Pages has been enabled"，
 即表示尚未完成上述开启步骤——这是仓库设置问题，与代码无关。）
 
+#### 门禁为什么跑本地站点？
+
+线上 saucedemo 是纯前端静态站点（账号/商品/购物车全部在 JS + `localStorage`，无后端），
+但公网偶发"加购按钮状态不刷新 / 点击购物车图标不跳转"等前端卡死，曾导致一次运行中
+购物车与结算前置链路集体超时、CI 变红——**站点抖动不该算到提交头上**。
+
+因此仓库内固化了该站点的静态构建产物 `testsite/`（约 1MB），CI 门禁用
+
+```bash
+python scripts/serve_local_site.py --port 8000        # 本地托管（SPA 路由回退）
+BASE_URL=http://127.0.0.1:8000/ python -m pytest -m smoke --browser=chrome
+```
+
+在本地站点上执行，结果 100% 确定；定时任务仍对**线上站点**跑全量做监控，
+失败只体现在报告里（测试步骤 `continue-on-error`），不会把工作流标红。
+
+> 站点版本更新时：把 `https://www.saucedemo.com/` 的 `index.html`、`/assets/*`、
+> `manifest.json`、图标等静态资源重新下载覆盖 `testsite/` 即可（纯静态，无构建步骤）。
+
 CI 运行环境的框架稳定性开关（工作流内置，本地设置同名环境变量同样生效）：
 
 | 环境变量       | 取值              | 作用 |
@@ -190,9 +209,11 @@ CI 运行环境的框架稳定性开关（工作流内置，本地设置同名�
 | `HEADLESS`     | `true` / `false`  | 强制无头模式（GitHub runner 无显示器） |
 | `RECORDING`    | `false`           | 关闭失败录屏后台线程：0.5s/帧的全屏截图与测试主线程争抢同一 chromedriver 连接（产生 urllib3 连接池告警并拖慢命令响应），CI 场景失败现场由静态截图覆盖 |
 | `WAIT_TIMEOUT` | 数字（如 `20`）   | 覆盖 `env.yaml` 的 `timeout.explicit_wait`，上浮显式等待预算 |
+| `BASE_URL`     | 如 `http://127.0.0.1:8000/` | 测试目标覆盖：同时替换 `base_url` 与 `urls` 中全部同域地址，断言无需改动 |
 
-CI 全量与冒烟均附加 `--reruns 1 --reruns-delay 3`：公共演示站偶发抖动导致的瞬时超时
-自动重跑一次（每条用例独立浏览器实例，重跑无状态残留，不会掩盖确定性失败）。
+线上监控任务附加 `--reruns 1 --reruns-delay 3`：站点偶发抖动导致的瞬时超时自动重跑一次
+（每条用例独立浏览器实例，重跑无状态残留，不会掩盖确定性失败）。报告生成器会按
+`testCaseId` 去重重跑结果，只保留最后一次尝试，条目数不会虚高。
 
 冒烟门禁（push/PR）的原始结果按需下载后本地渲染：
 

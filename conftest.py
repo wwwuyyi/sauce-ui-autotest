@@ -53,6 +53,19 @@ elif os.environ.get("CI"):
     # （GitHub Actions 等 CI 平台恒设 CI=true；本地/Windows 运行不受影响，仍取 env.yaml 的 10s）
     CONFIG["timeout"]["explicit_wait"] = 30
 
+# 测试目标覆盖（BASE_URL，本地静态站点 / 私有环境用）：
+#   CI 门禁用 scripts/serve_local_site.py 托管 testsite/（Swag Labs 纯前端静态构建），
+#   通过 BASE_URL=http://127.0.0.1:8000/ 指向本地，彻底消除公网站点抖动对 CI 的影响。
+# base_url 与 urls 中所有以原域名开头的地址同步替换，用例断言（URL 精确匹配）无需改动。
+_base_url_env = (os.environ.get("BASE_URL") or "").strip()
+if _base_url_env:
+    _old_base = str(CONFIG["base_url"]).rstrip("/")
+    _new_base = _base_url_env.rstrip("/")
+    CONFIG["base_url"] = _new_base + "/"
+    for _url_key, _url_value in CONFIG.get("urls", {}).items():
+        if isinstance(_url_value, str) and _url_value.startswith(_old_base):
+            CONFIG["urls"][_url_key] = _new_base + _url_value[len(_old_base):]
+
 
 def pytest_addoption(parser):
     """注册自定义命令行参数：--browser 选择浏览器类型"""
@@ -243,7 +256,7 @@ def cart_page(inventory_page, page_factory, config):
     """购物车页 fixture：预置购物车 2 件默认商品（Backpack + Bike Light）并进入购物车页"""
     from pages.cart_page import CartPage
     inventory_page.add_items_to_cart(config["checkout"]["default_item_slugs"])
-    inventory_page.open_cart()
+    inventory_page.open_cart(fallback_url=config["urls"]["cart"])
     page = page_factory(CartPage)
     page.wait_cart_page_loaded()
     return page

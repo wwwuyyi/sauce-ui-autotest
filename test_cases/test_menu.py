@@ -179,7 +179,7 @@ class TestMenu:
             assert menu.is_menu_closed()
 
         with allure.step("断言4-交叉验证：购物车页 0 件商品"):
-            inventory_page.open_cart()
+            inventory_page.open_cart(fallback_url=CONFIG["urls"]["cart"])
             cart_page = page_factory(CartPage)
             cart_page.wait_cart_page_loaded()
             assert cart_page.get_cart_item_count() == 0
@@ -196,7 +196,7 @@ class TestMenu:
 
         with allure.step("打开菜单并点击 Logout"):
             menu.open_menu()
-            menu.click_logout()
+            menu.click_logout(fallback_url=CONFIG["base_url"])
 
         with allure.step("等待回到登录页"):
             login_page.wait_url_to_be(CONFIG["base_url"])
