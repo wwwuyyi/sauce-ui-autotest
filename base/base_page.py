@@ -315,9 +315,18 @@ class BasePage:
     # ===================== 页面导航 =====================
 
     def open_url(self, url: str) -> None:
-        """打开指定页面"""
+        """打开指定页面（渲染进程偶发无响应导致 get 超时时自动重试一次）
+
+        背景：线上站点偶发 Chrome 渲染进程卡死（Selenium 报
+        "Timed out receiving message from renderer"），此时重发一次 get
+        通常可恢复；本地托管站点不会触发该分支。
+        """
         logger.info("打开页面: %s", url)
-        self.driver.get(url)
+        try:
+            self.driver.get(url)
+        except TimeoutException as exc:
+            logger.warning("页面加载超时/渲染进程无响应，重试一次: %s（%s）", url, exc)
+            self.driver.get(url)
 
     def get_current_url(self) -> str:
         """获取当前页面 URL"""

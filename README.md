@@ -173,7 +173,8 @@ allure serve reports/allure_results
 | 触发方式                       | 执行内容                                             | 报告去向                          |
 | ------------------------------ | ---------------------------------------------------- | --------------------------------- |
 | 每次 push / PR                 | ruff 静态检查 + 冒烟集（`-m smoke`，6 条核心主链路，**跑本地托管站点**） | Allure 原始数据 artifacts         |
-| 每天定时（工作日）+ 手动触发   | **全量 56 条（线上 saucedemo 监控）** → 内置生成器渲染 HTML | **自动发布到 GitHub Pages 在线查看** |
+| 每天定时（工作日），手动默认 local | **全量 56 条（本地托管站点，确定性）** → 内置生成器渲染 HTML | **自动发布到 GitHub Pages 在线查看** |
+| 手动触发且 `target=live`       | 全量 56 条对线上 saucedemo 监控（允许失败，不阻断工作流） | 同上 |
 
 **在线报告地址**：`https://<你的用户名>.github.io/sauce-ui-autotest/`
 
@@ -196,8 +197,9 @@ python scripts/serve_local_site.py --port 8000        # 本地托管（SPA 路�
 BASE_URL=http://127.0.0.1:8000/ python -m pytest -m smoke --browser=chrome
 ```
 
-在本地站点上执行，结果 100% 确定；定时任务仍对**线上站点**跑全量做监控，
-失败只体现在报告里（测试步骤 `continue-on-error`），不会把工作流标红。
+在本地站点上执行，结果 100% 确定。定时任务与手动默认（`target=local`）同样跑**本地站点**并发布
+报告，所以 Pages 报告只会在代码/断言真的有问题时才出现红色；需要观察线上站点时，
+在 **Actions → Run workflow** 里把 `target` 选成 `live` 手动触发一次即可（监控模式允许失败，不阻断工作流）。
 
 > 站点版本更新时：把 `https://www.saucedemo.com/` 的 `index.html`、`/assets/*`、
 > `manifest.json`、图标等静态资源重新下载覆盖 `testsite/` 即可（纯静态，无构建步骤）。
