@@ -1,7 +1,7 @@
-# CI 工作流（两个 job 按触发源分工）：
-#   smoke job —— push / PR 触发：本地托管站点上跑冒烟 6 条核心主链路（确定性门禁）；
-#   pages job —— 定时 / 手动触发：本地托管站点上跑全量 56 条，内置生成器渲染
-#                单文件 HTML 报告并发布到 GitHub Pages
+# CI 工作流（两个 job 按触发源分工，均为定时，不随 push/PR 自动触发）：
+#   smoke job —— 每两天 09:17（北京时间）定时：本地托管站点上跑冒烟 7 条核心主链路；
+#   pages job —— 每周一 09:17（北京时间）定时 / 手动：本地托管站点上跑全量 57 条，
+#                内置生成器渲染单文件 HTML 报告并发布到 GitHub Pages
 #                （报告地址 https://<用户名>.github.io/sauce-ui-autotest/，
 #                需一次性在仓库 Settings → Pages → Source 选择 "GitHub Actions"）。
 #                手动触发可选 target=live 改为对线上 saucedemo 做监控（允许失败、不阻断）。
@@ -29,11 +29,12 @@
 name: UI Tests
 
 on:
-  push:
-  pull_request:
   schedule:
-    # 工作日 UTC 01:17（北京时间 09:17）自动运行全量并更新 Pages 报告（本地站点）
-    - cron: "17 1 * * 1-5"
+    # 北京时间 09:17（UTC 01:17）
+    # 每两天跑冒烟。注意：*/2 按"每月日期"步进（1/3/5…），跨月边界间隔可能为 1~2 天
+    - cron: "17 1 */2 * *"
+    # 每周一跑全量并更新 Pages 报告
+    - cron: "17 1 * * 1"
   workflow_dispatch:    # 手动触发：全量运行并更新 Pages 报告
     inputs:
       target:
@@ -49,9 +50,9 @@ permissions:
   id-token: write
 
 jobs:
-  # ---------- Job 1：冒烟门禁（每次 push / PR） ----------
+  # ---------- Job 1：冒烟（每两天定时） ----------
   smoke:
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event.schedule == '17 1 */2 * *'
     runs-on: ubuntu-latest      # 官方 runner 自带 Chrome；双平台可改 windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -88,9 +89,9 @@ jobs:
           name: allure-results
           path: reports/allure_results/
 
-  # ---------- Job 2：全量（本地站点）→ 报告发布 GitHub Pages（定时 / 手动） ----------
+  # ---------- Job 2：全量（本地站点）→ 报告发布 GitHub Pages（每周一定时 / 手动） ----------
   pages:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event.schedule == '17 1 * * 1' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
