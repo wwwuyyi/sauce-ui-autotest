@@ -72,29 +72,50 @@ class BasePage:
         try:
             return self._wait(timeout).until(EC.visibility_of_element_located(locator))
         except TimeoutException as exc:
-            logger.error("等待元素可见超时: %s", locator)
-            self.save_screenshot("element_timeout")
-            # 附加失败时的页面源码，便于离线分析定位原因
-            allure.attach(self.driver.page_source, "失败时页面源码", allure.attachment_type.HTML)
-            # 重新抛出带清晰中文说明的异常，报错信息直接可读
-            raise TimeoutException(
-                f"显式等待 {timeout or self.timeout}s 后元素仍不可见: {locator}") from exc
+            raise self._find_timeout(locator, timeout, "仍不可见") from exc
 
     def find_element_presence(self, locator: Locator, timeout: Optional[int] = None) -> WebElement:
         """显式等待元素【出现在 DOM】（不要求可见）后返回该元素"""
         logger.info("等待元素出现: %s", locator)
-        return self._wait(timeout).until(EC.presence_of_element_located(locator))
+        try:
+            return self._wait(timeout).until(EC.presence_of_element_located(locator))
+        except TimeoutException as exc:
+            raise self._find_timeout(locator, timeout, "未出现") from exc
 
     def find_element_clickable(self, locator: Locator, timeout: Optional[int] = None) -> WebElement:
         """显式等待元素【可点击】后返回该元素（点击前专用）"""
         logger.info("等待元素可点击: %s", locator)
-        return self._wait(timeout).until(EC.element_to_be_clickable(locator))
+        try:
+            return self._wait(timeout).until(EC.element_to_be_clickable(locator))
+        except TimeoutException as exc:
+            raise self._find_timeout(locator, timeout, "仍不可点击") from exc
 
     def find_elements(self, locator: Locator, timeout: Optional[int] = None) -> List[WebElement]:
         """显式等待【至少一个匹配元素出现在 DOM】后返回全部匹配元素列表"""
         logger.info("查找元素列表: %s", locator)
-        self._wait(timeout).until(EC.presence_of_all_elements_located(locator))
+        try:
+            self._wait(timeout).until(EC.presence_of_all_elements_located(locator))
+        except TimeoutException as exc:
+            raise self._find_timeout(locator, timeout, "列表未出现") from exc
         return self.driver.find_elements(*locator)  # Selenium 4 标准语法
+
+    def _find_timeout(self, locator: Locator, timeout: Optional[int],
+                      reason: str) -> TimeoutException:
+        """元素查找超时的统一失败取证：截图 + page_source 附件 + 中文异常
+
+        仅在超时路径调用（正常查找零额外开销）。取证动作自身失败不得掩盖原始超时语义。
+
+        :param reason: 附加在"元素"之后的结果描述，如"仍不可见"/"未出现"
+        """
+        logger.error("等待元素超时（%s）: %s", reason, locator)
+        try:
+            self.save_screenshot("element_timeout")
+            # 附加失败时的页面源码，便于离线分析定位原因
+            allure.attach(self.driver.page_source, "失败时页面源码", allure.attachment_type.HTML)
+        except Exception as evidence_exc:  # 取证失败不掩盖原始查找超时
+            logger.warning("查找超时现场取证失败: %s", evidence_exc)
+        wait_timeout = self.timeout if timeout is None else timeout
+        return TimeoutException(f"显式等待 {wait_timeout}s 后元素{reason}: {locator}")
 
     # ===================== 元素状态判断（返回布尔值，不抛异常） =====================
 
