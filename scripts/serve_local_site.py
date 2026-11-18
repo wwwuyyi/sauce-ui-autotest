@@ -27,8 +27,24 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SITE_DIR = PROJECT_ROOT / "testsite"
 
 
+class LocalSiteServer(ThreadingHTTPServer):
+    """静态站点服务：提高连接排队上限
+
+    ThreadingHTTPServer 默认 request_queue_size=5；Chrome 打开页面时会并发请求
+    JS/CSS/图片/字体等十几个资源，瞬时连接数可能超过队列上限，Windows 下会直接
+    拒绝连接（浏览器报 net::ERR_CONNECTION_REFUSED，页面渲染不完整）。
+    """
+
+    allow_reuse_address = True
+    daemon_threads = True
+    request_queue_size = 128
+
+
 class SpaRequestHandler(SimpleHTTPRequestHandler):
     """静态文件服务 + SPA 路由回退（未知 *.html 路径返回 index.html）"""
+
+    # HTTP/1.1 启用 keep-alive：浏览器复用连接，减少并发建连压力
+    protocol_version = "HTTP/1.1"
 
     def translate_path(self, path):
         resolved = super().translate_path(path)
@@ -56,7 +72,7 @@ def main():
         return 1
 
     handler = partial(SpaRequestHandler, directory=str(SITE_DIR))
-    server = ThreadingHTTPServer((args.host, args.port), handler)
+    server = LocalSiteServer((args.host, args.port), handler)
     server.verbose = args.verbose
     print(f"[OK] 本地 Swag Labs 站点已启动: http://{args.host}:{args.port}/", flush=True)
     try:

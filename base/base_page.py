@@ -148,9 +148,12 @@ class BasePage:
 
         安全说明：日志中不回显输入内容，避免密码等敏感信息泄露到日志文件。
         异常防护：捕获元素失效/被遮挡等常见注入异常，截图留证并抛出清晰错误。
-        回读校验：输入后回读 value 与目标值比对。React 类页面水合时可能重置输入框
-        （Selenium 输得极快，js 尚未接管 DOM），回读不一致则重新定位校正重输，
-        最多校正 2 次；仍不一致抛 ValueError，避免空表单被静默提交。
+        回读校验：输入后回读 value 与目标值比对。React 受控组件在 CI 无头 Chrome 下
+        偶发"键盘事件被吞/状态更新滞后"（与点击丢失同类问题），因此：
+        1. 每次输入后给页面 3s 的渲染/状态同步窗口再回读；
+        2. 最多校正重输 2 次；
+        3. 仍不一致时用 JS 原生 setter 写值并派发 input/change 事件兜底，
+           再回读确认；全部失败才抛 ValueError，避免空表单被静默提交。
         """
         logger.info("向元素输入内容: %s", locator)
         target = text or ""
@@ -161,18 +164,52 @@ class BasePage:
                     element.clear()
                 element.send_keys(text)
                 try:
-                    if (element.get_attribute("value") or "") == target:
+                    if self._wait_input_value(locator, target, timeout=3):
                         return
                 except StaleElementReferenceException:
                     logger.warning("输入后元素已失效（页面重渲染），重新定位输入: %s", locator)
                     continue
                 logger.warning("输入值回读不一致（可能为页面渲染竞态），第 %d 次校正重输: %s",
                                attempt + 1, locator)
-            raise ValueError(f"输入值回读校验失败（3 次尝试均与目标不一致）: {locator}")
+            if self._set_value_by_js(locator, target):
+                logger.info("JS 写值兜底生效: %s", locator)
+                return
+            raise ValueError(f"输入值回读校验失败（原生输入与 JS 兜底均不一致）: {locator}")
         except Exception as exc:
             logger.error("输入内容失败: %s, 异常: %s", locator, exc)
             self.save_screenshot("input_fail")
             raise
+
+    def _wait_input_value(self, locator: Locator, expected: str, timeout: int = 3) -> bool:
+        """等待输入框 value 变为期望值（给 React 状态同步留出窗口）；超时返回 False"""
+        try:
+            self._wait(timeout).until(
+                lambda d: (d.find_element(*locator).get_attribute("value") or "") == expected)
+            return True
+        except (TimeoutException, StaleElementReferenceException):
+            return False
+
+    def _set_value_by_js(self, locator: Locator, value: str) -> bool:
+        """JS 原生 setter 写值 + 派发 input/change 事件（受控组件的可靠兜底）
+
+        React 受控输入框直接改 el.value 不会触发 onChange，必须使用原型上的
+        原生 setter 写值后再派发 input 事件，React 才能感知并同步状态。
+        """
+        try:
+            element = self.find_element_presence(locator)
+            self.execute_script(
+                "const el = arguments[0], v = arguments[1];"
+                "const proto = el instanceof HTMLTextAreaElement"
+                " ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;"
+                "const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;"
+                "setter.call(el, v);"
+                "el.dispatchEvent(new Event('input', { bubbles: true }));"
+                "el.dispatchEvent(new Event('change', { bubbles: true }));",
+                element, value)
+            return self._wait_input_value(locator, value, timeout=3)
+        except Exception as exc:  # 兜底失败不掩盖原始输入异常语义
+            logger.warning("JS 写值兜底失败: %s", exc)
+            return False
 
     def get_text(self, locator: Locator, timeout: Optional[int] = None) -> str:
         """获取元素可见文本（异常时打 ERROR 日志并原样抛出）"""

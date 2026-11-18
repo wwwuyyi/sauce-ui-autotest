@@ -55,7 +55,14 @@ class MenuPage(BasePage):
         """
         self.click(self.BURGER_BTN)
         wait_time = timeout or self.MENU_TIMEOUT
-        self.wait_attribute_equals(self.MENU_WRAP, "aria-hidden", "false", wait_time)
+        try:
+            self.wait_attribute_equals(self.MENU_WRAP, "aria-hidden", "false",
+                                       min(wait_time, 10))
+        except TimeoutException:
+            # CI 无头 Chrome 偶发输入事件丢失（与加购按钮同类）：JS 直接派发 click
+            logger.warning("点击汉堡按钮后菜单未展开，改用 JS 触发点击复核")
+            self.js_click(self.BURGER_BTN)
+            self.wait_attribute_equals(self.MENU_WRAP, "aria-hidden", "false", wait_time)
         # 谓词全部使用 timeout=0 的即时探测（单次 is_displayed 判定），
         # 避免内层阻塞等待拖慢外层轮询节奏，让 0.5s 每次的轮询覆盖整个动画窗口
         self.wait_until(
@@ -68,10 +75,16 @@ class MenuPage(BasePage):
         )
 
     def close_menu(self, timeout: int = None) -> None:
-        """点击关闭按钮收起侧边栏，等待菜单容器进入收起态"""
+        """点击关闭按钮收起侧边栏，等待菜单容器进入收起态（JS 点击兜底）"""
+        wait_time = timeout or self.MENU_TIMEOUT
         self.click(self.CROSS_BTN)
-        self.wait_attribute_equals(self.MENU_WRAP, "aria-hidden", "true",
-                                   timeout or self.MENU_TIMEOUT)
+        try:
+            self.wait_attribute_equals(self.MENU_WRAP, "aria-hidden", "true",
+                                       min(wait_time, 10))
+        except TimeoutException:
+            logger.warning("点击关闭按钮后菜单未收起，改用 JS 触发点击复核")
+            self.js_click(self.CROSS_BTN)
+            self.wait_attribute_equals(self.MENU_WRAP, "aria-hidden", "true", wait_time)
 
     def get_menu_aria_hidden(self) -> str:
         """回读菜单容器 aria-hidden（'false'=展开 / 'true'=收起）"""
