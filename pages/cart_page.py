@@ -24,6 +24,7 @@ class CartPage(BasePage):
 
     # ===================== 元素定位 =====================
     CART_LIST = (By.CSS_SELECTOR, ".cart_list")                     # 购物车列表容器
+    INVENTORY_LIST = InventoryPage.INVENTORY_LIST                   # 商品列表容器（继续购物成功标志）
     CART_ITEM = (By.CSS_SELECTOR, ".cart_item")                     # 购物车商品行
     CART_ITEM_NAME = (By.CSS_SELECTOR, ".cart_item .inventory_item_name")   # 行内商品名称
     CART_ITEM_PRICE = (By.CSS_SELECTOR, ".cart_item .inventory_item_price") # 行内商品价格
@@ -109,8 +110,12 @@ class CartPage(BasePage):
             return False
 
     def continue_shopping(self) -> None:
-        """点击继续购物按钮（返回商品列表页）"""
-        self.click(self.CONTINUE_SHOPPING)
+        """点击继续购物按钮（商品列表可见 = 成功；原生点击 → JS 兜底）"""
+        self.click_until(self.CONTINUE_SHOPPING, self._is_inventory_visible,
+                         fail_message="点击 Continue Shopping 后未回到商品列表")
+
+    def _is_inventory_visible(self) -> bool:
+        return self.is_element_visible(self.INVENTORY_LIST, timeout=0)
 
     def click_checkout(self, retries: int = 1) -> None:
         """点击去结算按钮（进入结算第一步）

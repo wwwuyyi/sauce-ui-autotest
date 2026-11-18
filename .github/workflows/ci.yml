@@ -14,8 +14,12 @@
 #   CI 用 scripts/serve_local_site.py 本地托管，配合 BASE_URL 环境变量指向它，
 #   得到 100% 确定的执行环境；线上站点监控仅保留为手动可选项。
 #
+# 浏览器模式：CI 使用 xvfb-run 虚拟显示 + 有头 Chrome（HEADLESS=false）。
+#   CI 无头模式偶发输入事件丢失（点击/键盘命令成功返回但页面无响应、控制台无
+#   JS 报错），已于 2026-11 多次复现；有头模式在虚拟显示下可规避该问题。
+#
 # 环境变量约定（conftest / 页面层读取）：
-#   HEADLESS=true            -> 强制无头模式（GitHub runner 无显示器）
+#   HEADLESS=false           -> Xvfb 下运行有头 Chrome
 #   RECORDING=false          -> 关闭失败录屏线程（0.5s/帧截图与主线程争抢 chromedriver）
 #   WAIT_TIMEOUT=30          -> 显式等待默认超时上浮（无 GPU runner 响应偏慢）
 #   BASE_URL=...             -> 测试目标覆盖（同时派生 urls 中的各页面地址）
@@ -58,8 +62,10 @@ jobs:
         run: |
           pip install ruff
           ruff check .
-      # 本地站点与测试同一 step 内启动：避免 GitHub runner 在 step 结束时清理后台进程
-      - name: 启动本地站点并运行冒烟测试（确定性门禁）
+      # 本地站点与测试同一 step 内启动：避免 GitHub runner 在 step 结束时清理后台进程。
+      # 使用 Xvfb 虚拟显示 + 有头 Chrome：CI 无头模式偶发输入事件丢失（点击/键盘命令
+      # 成功但页面无响应、控制台无报错），有头模式可规避该问题；--reruns 1 作为兜底。
+      - name: 启动本地站点并运行冒烟测试（Xvfb + 有头 Chrome）
         run: |
           python scripts/serve_local_site.py --port 8000 &
           SERVER_PID=$!
@@ -69,9 +75,9 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:8000/ >/dev/null
-          python -m pytest -m smoke --browser=chrome
+          xvfb-run -a -s "-screen 0 1920x1080x24" python -m pytest -m smoke --browser=chrome --reruns 1 --reruns-delay 2
         env:
-          HEADLESS: "true"
+          HEADLESS: "false"
           RECORDING: "false"
           WAIT_TIMEOUT: "30"
           BASE_URL: "http://127.0.0.1:8000/"
@@ -94,7 +100,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install -r requirements.txt
-      # 定时任务 / 手动 target=local：本地站点全量（确定性报告）
+      # 定时任务 / 手动 target=local：本地站点全量（确定性报告，Xvfb + 有头 Chrome）
       - name: 启动本地站点并运行全量测试（确定性报告，56 条）
         if: github.event_name == 'schedule' || inputs.target == 'local'
         run: |
@@ -106,9 +112,9 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:8000/ >/dev/null
-          python -m pytest --browser=chrome
+          xvfb-run -a -s "-screen 0 1920x1080x24" python -m pytest --browser=chrome --reruns 1 --reruns-delay 2
         env:
-          HEADLESS: "true"
+          HEADLESS: "false"
           RECORDING: "false"
           WAIT_TIMEOUT: "30"
           BASE_URL: "http://127.0.0.1:8000/"

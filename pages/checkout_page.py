@@ -46,6 +46,7 @@ class CheckoutPage(BasePage):
     # -- 公共 --
     TITLE = (By.CSS_SELECTOR, ".title")
     BADGE = InventoryPage.BADGE      # 购物车角标（下单完成后应清空）
+    INVENTORY_LIST = InventoryPage.INVENTORY_LIST   # 商品列表容器（Back Home 成功标志）
     # -- 第三步：完成页 --
     COMPLETE_HEADER = (By.CSS_SELECTOR, "[data-test='complete-header']")
     COMPLETE_TEXT = (By.CSS_SELECTOR, ".complete-text")
@@ -70,12 +71,28 @@ class CheckoutPage(BasePage):
         self.click_continue()
 
     def click_continue(self) -> None:
-        """点击继续按钮"""
-        self.click(self.CONTINUE)
+        """点击继续按钮（概览页或校验错误出现 = 点击已生效；原生点击 → JS 兜底）
+
+        注意：必填校验负向用例不会跳转，而是停留在表单页并显示错误提示，
+        因此成功条件为"Finish 按钮出现 或 校验错误提示出现"，两者缺一不可判失败。
+        """
+        self.click_until(self.CONTINUE, self._is_continue_applied,
+                         fail_message="点击 Continue 后既未进入概览页，也未出现校验提示")
+
+    def _is_continue_applied(self) -> bool:
+        return (self.is_element_visible(self.FINISH, timeout=0)
+                or self.is_element_visible(self.ERROR_MESSAGE, timeout=0))
 
     def click_cancel(self) -> None:
-        """点击取消按钮"""
-        self.click(self.CANCEL)
+        """点击取消按钮（购物车列表可见 = 已回到购物车页；同样带 JS 兜底）"""
+        self.click_until(self.CANCEL, self._is_cart_list_visible,
+                         fail_message="点击 Cancel 后未回到购物车页")
+
+    def _is_finish_visible(self) -> bool:
+        return self.is_element_visible(self.FINISH, timeout=0)
+
+    def _is_cart_list_visible(self) -> bool:
+        return self.is_element_visible(self.CART_LIST, timeout=0)
 
     def get_first_name_value(self) -> str:
         """回读 FirstName 输入框当前值（输入未被清洗/截断断言用）"""
@@ -140,8 +157,12 @@ class CheckoutPage(BasePage):
     # ===================== 业务方法：第三步（完成页）与返回 =====================
 
     def click_finish(self) -> None:
-        """点击完成订单按钮"""
-        self.click(self.FINISH)
+        """点击完成订单按钮（完成页标题出现 = 成功；原生点击 → JS 兜底）"""
+        self.click_until(self.FINISH, self._is_complete_visible,
+                         fail_message="点击 Finish 后未进入订单完成页")
+
+    def _is_complete_visible(self) -> bool:
+        return self.is_element_visible(self.COMPLETE_HEADER, timeout=0)
 
     def wait_complete_loaded(self, timeout: int = None) -> None:
         """等待订单完成页加载完成"""
@@ -164,5 +185,9 @@ class CheckoutPage(BasePage):
         return not self.is_element_present(self.BADGE, timeout=2)
 
     def click_back_to_products(self) -> None:
-        """点击返回商品列表按钮"""
-        self.click(self.BACK_TO_PRODUCTS)
+        """点击返回商品列表按钮（列表容器可见 = 成功；原生点击 → JS 兜底）"""
+        self.click_until(self.BACK_TO_PRODUCTS, self._is_inventory_visible,
+                         fail_message="点击 Back Home 后未回到商品列表")
+
+    def _is_inventory_visible(self) -> bool:
+        return self.is_element_visible(self.INVENTORY_LIST, timeout=0)

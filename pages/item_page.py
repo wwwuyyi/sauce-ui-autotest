@@ -12,7 +12,6 @@ item_page.py —— 商品详情页对象（Page 对象层）
 """
 import logging
 
-from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
 from base.base_page import BasePage
@@ -85,34 +84,23 @@ class ItemPage(BasePage):
     def add_to_cart(self, retries: int = 1) -> None:
         """详情页加购并等待按钮切换为 Remove（按钮为通用 data-test，无需 slug）
 
-        健壮性：与 InventoryPage.add_to_cart 同款兜底——偶发"点击后按钮未切换"
-        （点击未生效/状态未翻转）。检测到加购按钮仍留在 DOM 时自动重试点击（默认 1 次）。
+        原生点击 → JS 派发 click → 重试；覆盖 CI 无头 Chrome 偶发输入事件丢失。
         """
-        for attempt in range(retries + 1):
-            self.click(self.ADD_BTN)
-            try:
-                self.find_element(self.REMOVE_BTN)
-                return
-            except TimeoutException:
-                if attempt < retries and not self.is_add_button_absent():
-                    logger.warning("详情页加购后按钮未切换（点击疑似未生效），第 %d 次重试点击",
-                                   attempt + 1)
-                    continue
-                raise
+        self.click_until(self.ADD_BTN, self._is_remove_visible,
+                         retries=retries,
+                         fail_message="详情页加购失败（原生/JS 点击均未生效）")
 
     def remove_from_cart(self, retries: int = 1) -> None:
-        """详情页移除并等待按钮恢复为加购（按钮未恢复时自动重试点击，同加购健壮性）"""
-        for attempt in range(retries + 1):
-            self.click(self.REMOVE_BTN)
-            try:
-                self.find_element(self.ADD_BTN)
-                return
-            except TimeoutException:
-                if attempt < retries and not self.is_element_present(self.REMOVE_BTN, timeout=2):
-                    logger.warning("详情页移除后按钮未恢复（点击疑似未生效），第 %d 次重试点击",
-                                   attempt + 1)
-                    continue
-                raise
+        """详情页移除并等待按钮恢复为加购（原生点击 → JS 兜底 → 重试）"""
+        self.click_until(self.REMOVE_BTN, self._is_add_visible,
+                         retries=retries,
+                         fail_message="详情页移除失败（原生/JS 点击均未生效）")
+
+    def _is_remove_visible(self) -> bool:
+        return self.is_element_visible(self.REMOVE_BTN, timeout=0)
+
+    def _is_add_visible(self) -> bool:
+        return self.is_element_visible(self.ADD_BTN, timeout=0)
 
     def is_add_button_absent(self) -> bool:
         """加购按钮是否已不在 DOM"""
@@ -139,8 +127,12 @@ class ItemPage(BasePage):
         self.wait_all_images_loaded(self.DETAILS_IMG, timeout)
 
     def back_to_products(self) -> None:
-        """点击返回列表按钮"""
-        self.click(self.BACK_BTN)
+        """点击返回列表按钮（列表容器可见 = 成功；原生点击 → JS 兜底）"""
+        self.click_until(self.BACK_BTN, self._is_inventory_visible,
+                         fail_message="点击 Back to products 后未回到商品列表")
+
+    def _is_inventory_visible(self) -> bool:
+        return self.is_element_visible(self.INVENTORY_LIST, timeout=0)
 
     def is_details_container_absent(self) -> bool:
         """详情容器是否已不在 DOM（后退/跳转后核验）"""

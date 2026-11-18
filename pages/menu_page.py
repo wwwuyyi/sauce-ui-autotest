@@ -35,6 +35,7 @@ class MenuPage(BasePage):
     BURGER_BTN = (By.ID, "react-burger-menu-btn")            # 汉堡菜单按钮
     CROSS_BTN = (By.ID, "react-burger-cross-btn")            # 菜单关闭按钮
     MENU_WRAP = (By.CSS_SELECTOR, ".bm-menu-wrap")           # 菜单容器（aria-hidden 权威状态）
+    INVENTORY_LIST = (By.CSS_SELECTOR, ".inventory_list")    # 商品列表容器（All Items 成功标志）
     OVERLAY = (By.CSS_SELECTOR, ".bm-overlay")               # 遮罩层
     ALL_ITEMS = (By.CSS_SELECTOR, "[data-test='inventory-sidebar-link']")  # All Items
     ABOUT = (By.CSS_SELECTOR, "[data-test='about-sidebar-link']")          # About（外链新窗口）
@@ -120,8 +121,12 @@ class MenuPage(BasePage):
     # -- 四个菜单项操作 --
 
     def click_all_items(self) -> None:
-        """点击 All Items（回到商品列表页）"""
-        self.click(self.ALL_ITEMS)
+        """点击 All Items（回到商品列表页；原生点击 → JS 兜底）"""
+        self.click_until(self.ALL_ITEMS, self._is_inventory_visible,
+                         fail_message="点击 All Items 后未回到商品列表")
+
+    def _is_inventory_visible(self) -> bool:
+        return self.is_element_visible(self.INVENTORY_LIST, timeout=0)
 
     def click_about(self) -> None:
         """点击 About（跳转 Sauce Labs 官网，站点实现可能为新窗口或同窗口跳转）"""

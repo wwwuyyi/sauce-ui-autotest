@@ -143,6 +143,40 @@ class BasePage:
             self.save_screenshot("click_fail")
             raise
 
+    def click_until(self, locator: Locator, success, timeout: int = 10,
+                    js_timeout: int = 5, retries: int = 1,
+                    fail_message: str = "点击后未达到成功条件") -> None:
+        """点击并等待业务成功条件；原生点击被前端吞掉时用 JS 派发 click 兜底
+
+        CI 无头 Chrome 偶发输入事件丢失：WebDriver 报告点击成功，但页面从未处理
+        （控制台无任何 JS 报错、元素状态不变）。此方法用业务成功条件判定点击是否
+        真正生效，未生效时改用 JS 直接派发 click（不依赖输入坐标与命中测试链路）。
+
+        :param success: 无参可调用对象，返回 True 表示点击已生效
+        """
+        for attempt in range(retries + 1):
+            self.click(locator)
+            if self._poll_success(success, timeout):
+                return
+            logger.warning("原生点击未生效，改用 JS 触发点击复核: %s", locator)
+            try:
+                self.js_click(locator)
+            except Exception as exc:  # 兜底失败不改变最终异常语义
+                logger.warning("JS 点击失败: %s", exc)
+            if self._poll_success(success, js_timeout):
+                logger.info("JS 点击后已生效: %s", locator)
+                return
+            if attempt < retries:
+                logger.warning("第 %d 次重试点击: %s", attempt + 1, locator)
+        raise TimeoutException(f"{fail_message}: {locator}")
+
+    def _poll_success(self, success, timeout: int) -> bool:
+        """轮询成功条件（success 为无参可调用对象）；超时返回 False"""
+        try:
+            return bool(self._wait(timeout).until(lambda _: success()))
+        except TimeoutException:
+            return False
+
     def input_text(self, locator: Locator, text: str, clear_first: bool = True) -> None:
         """在元素中输入文本：默认先清空再输入，模拟真实键盘输入
 

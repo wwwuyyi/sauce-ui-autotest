@@ -201,6 +201,10 @@ BASE_URL=http://127.0.0.1:8000/ python -m pytest -m smoke --browser=chrome
 报告，所以 Pages 报告只会在代码/断言真的有问题时才出现红色；需要观察线上站点时，
 在 **Actions → Run workflow** 里把 `target` 选成 `live` 手动触发一次即可（监控模式允许失败，不阻断工作流）。
 
+> CI 使用 `xvfb-run` 虚拟显示 + **有头 Chrome**（`HEADLESS=false`）：无头模式在 CI 上偶发
+> 输入事件丢失（点击/键盘命令成功但页面无响应、控制台无报错），有头模式可规避；
+> 页面操作层同时保留"原生点击 → JS 派发 click"兜底与失败诊断附件。
+
 > 站点版本更新时：把 `https://www.saucedemo.com/` 的 `index.html`、`/assets/*`、
 > `manifest.json`、图标等静态资源重新下载覆盖 `testsite/` 即可（纯静态，无构建步骤）。
 
