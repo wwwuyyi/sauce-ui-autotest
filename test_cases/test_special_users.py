@@ -24,11 +24,11 @@ import allure
 from pages.inventory_page import InventoryPage
 from pages.menu_page import MenuPage
 from utils.allure_util import attach_text
-from utils.yaml_util import YamlUtil
+from utils.config_util import get_effective_config
 
 logger = logging.getLogger(__name__)
 
-CONFIG = YamlUtil().read_yaml("config/env.yaml")
+CONFIG = get_effective_config()
 SPECIAL = CONFIG["special_users"]
 
 

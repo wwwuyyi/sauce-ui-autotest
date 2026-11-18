@@ -23,12 +23,12 @@ import pytest
 
 from pages.cart_page import CartPage
 from pages.checkout_page import CheckoutPage
+from utils.config_util import get_effective_config
 from utils.data_util import get_product
-from utils.yaml_util import YamlUtil
 
 logger = logging.getLogger(__name__)
 
-CONFIG = YamlUtil().read_yaml("config/env.yaml")
+CONFIG = get_effective_config()
 URLS = CONFIG["urls"]
 TITLES = CONFIG["expected"]["titles"]
 DEFAULT_SLUGS = CONFIG["checkout"]["default_item_slugs"]

@@ -28,12 +28,12 @@ from pages.cart_page import CartPage
 from pages.checkout_page import CheckoutPage
 from pages.inventory_page import InventoryPage
 from utils.allure_util import set_severity_from_str
+from utils.config_util import get_effective_config
 from utils.data_util import get_product
-from utils.yaml_util import YamlUtil
 
 logger = logging.getLogger(__name__)
 
-CONFIG = YamlUtil().read_yaml("config/env.yaml")
+CONFIG = get_effective_config()
 VALID_INFO = CONFIG["checkout"]["valid_info"]
 CO_TITLES = CONFIG["expected"]["titles"]
 CO_URLS = CONFIG["urls"]

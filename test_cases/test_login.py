@@ -22,12 +22,12 @@ import allure
 import pytest
 
 from utils.allure_util import set_severity_from_str
-from utils.yaml_util import YamlUtil
+from utils.config_util import get_effective_config
 
 logger = logging.getLogger(__name__)
 
-# 模块级读取环境配置（YamlUtil 为单例，全项目共享同一份配置，无重复 IO）
-CONFIG = YamlUtil().read_yaml("config/env.yaml")
+# 模块级生效配置（含环境变量覆写；每次读取返回独立副本，用例间互不污染）
+CONFIG = get_effective_config()
 ERROR_MSGS = CONFIG["expected"]["error_messages"]
 
 

@@ -23,9 +23,14 @@ import pytest
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 
+from utils.config_util import (
+    get_edge_driver_path,
+    get_effective_config,
+    is_headless,
+    is_recording_enabled,
+)
 from utils.log_util import LogUtil
 from utils.screen_recorder import ScreenRecorder
-from utils.yaml_util import YamlUtil
 
 # ---------------- 全局常量 ----------------
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -38,33 +43,9 @@ LogUtil.setup()
 
 logger = logging.getLogger(__name__)
 
-# 会话级读取环境配置（单例 YamlUtil，全会话共享同一份，命令行参数默认值也来源于此）
-CONFIG = YamlUtil().read_yaml(CONFIG_PATH)
-
-# 环境变量覆盖（CI 稳定性开关；本地不设环境变量时行为与 env.yaml 完全一致）。
-# YamlUtil 缓存返回的是同一份 dict 对象，此处修改对全部 fixture 与用例模块生效：
-#   WAIT_TIMEOUT=30   -> 显式等待默认超时上浮（CI runner 无 GPU + 公共演示站抖动，本地保持 10s）
-#   RECORDING=false   -> 关闭失败录屏后台线程（详见 driver fixture 内注释）
-_wait_timeout_env = (os.environ.get("WAIT_TIMEOUT") or "").strip()
-if _wait_timeout_env.isdigit():
-    CONFIG["timeout"]["explicit_wait"] = int(_wait_timeout_env)
-elif os.environ.get("CI"):
-    # 只在 CI 环境生效的兜底默认：未显式传 WAIT_TIMEOUT 时全局显式等待上浮到 30s
-    # （GitHub Actions 等 CI 平台恒设 CI=true；本地/Windows 运行不受影响，仍取 env.yaml 的 10s）
-    CONFIG["timeout"]["explicit_wait"] = 30
-
-# 测试目标覆盖（BASE_URL，本地静态站点 / 私有环境用）：
-#   CI 门禁用 scripts/serve_local_site.py 托管 testsite/（Swag Labs 纯前端静态构建），
-#   通过 BASE_URL=http://127.0.0.1:8000/ 指向本地，彻底消除公网站点抖动对 CI 的影响。
-# base_url 与 urls 中所有以原域名开头的地址同步替换，用例断言（URL 精确匹配）无需改动。
-_base_url_env = (os.environ.get("BASE_URL") or "").strip()
-if _base_url_env:
-    _old_base = str(CONFIG["base_url"]).rstrip("/")
-    _new_base = _base_url_env.rstrip("/")
-    CONFIG["base_url"] = _new_base + "/"
-    for _url_key, _url_value in CONFIG.get("urls", {}).items():
-        if isinstance(_url_value, str) and _url_value.startswith(_old_base):
-            CONFIG["urls"][_url_key] = _new_base + _url_value[len(_old_base):]
+# 会话级生效配置：环境变量覆写（WAIT_TIMEOUT / BASE_URL）在 utils.config_util
+# 读取时统一完成，命令行参数默认值也来源于此。返回的是独立副本，各模块互不影响。
+CONFIG = get_effective_config(CONFIG_PATH)
 
 
 def pytest_addoption(parser):
@@ -99,10 +80,14 @@ def pytest_sessionstart(session):
 
 # ===================== Fixtures =====================
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def config():
-    """全局配置 fixture：返回 env.yaml 全部配置（session 级，只读取一次）"""
-    return CONFIG
+    """全局配置 fixture：每个用例返回一份独立的生效配置副本
+
+    环境覆写已在读取时应用；function 级 + 深拷贝保证用例内修改配置不会外溢到
+    其他用例（与各测试模块的模块级 CONFIG 同样互不影响）。
+    """
+    return get_effective_config(CONFIG_PATH)
 
 
 @pytest.fixture(scope="function")
@@ -118,8 +103,7 @@ def driver(request, config):
     browser_name = request.config.getoption("--browser")
     browser_conf = config["browser"]
     # CI 环境变量覆盖：HEADLESS=true 强制无头模式（本地/提交版默认取 env.yaml 配置）
-    headless_env = (os.environ.get("HEADLESS") or "").strip().lower()
-    headless = headless_env == "true" if headless_env else browser_conf["headless"]
+    headless = is_headless(browser_conf)
     page_load_timeout = browser_conf["page_load_timeout"]
 
     logger.info("=" * 60)
@@ -150,7 +134,7 @@ def driver(request, config):
             if browser_conf.get("window_size"):
                 options.add_argument(f"--window-size={browser_conf['window_size']}")
             # Edge 驱动路径：环境变量优先（本机/CI 私有凭据不入库），提交版 env.yaml 保持空串
-            edge_driver_path = os.environ.get("EDGE_DRIVER_PATH") or ""
+            edge_driver_path = get_edge_driver_path()
             if edge_driver_path:  # 网络受限下载失败时，启用环境变量指定的本地驱动
                 from selenium.webdriver.edge.service import Service as EdgeService
                 logger.info("使用本地 Edge 驱动: %s", edge_driver_path)
@@ -196,8 +180,7 @@ def driver(request, config):
     # "Connection pool is full, discarding connection: localhost" 警告即来自该并发，
     # 并整体拖慢命令响应。CI 无回看录屏需求，失败现场由静态截图覆盖；
     # 不启动线程时环形缓冲 0 帧，失败钩子的 GIF 合成自然降级，无需额外分支。
-    recording_env = (os.environ.get("RECORDING") or "").strip().lower()
-    if recording_conf.get("enabled", True) and recording_env != "false":
+    if is_recording_enabled(recording_conf):
         recorder.start()
     request.node._screen_recorder = recorder  # 挂到节点上供失败钩子取用
 

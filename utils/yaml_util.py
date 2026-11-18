@@ -11,8 +11,11 @@ yaml_util.py —— YAML 读取工具（工具层）
   无论从哪个目录启动 pytest 都能正确定位 config/env.yaml；
 - safe_load 防注入：禁止 yaml.load 的任意对象反序列化风险；
 - 异常友好化：文件不存在/解析失败/内容为空时抛出带中文说明的明确错误，
-  而不是晦涩的底层 IO 异常堆栈。
+  而不是晦涩的底层 IO 异常堆栈；
+- 防篡改：read_yaml 返回缓存内容的深拷贝，调用方修改返回对象不会污染缓存与
+  其他调用方（配置量小，深拷贝开销可忽略）。
 """
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +44,8 @@ class YamlUtil:
     def read_yaml(self, file_path) -> Any:
         """读取 YAML 文件并转换为 Python 对象（带缓存，重复读取直接命中内存）
 
+        返回值为缓存内容的深拷贝：调用方可以自由修改，不会影响缓存与其它调用方。
+
         :param file_path: 文件路径（支持绝对路径或基于项目根目录的相对路径）
         :raises FileNotFoundError: 文件不存在（带中文说明）
         :raises ValueError: YAML 语法错误或内容为空（带中文说明）
@@ -65,7 +70,7 @@ class YamlUtil:
         data = self._cache[key]
         if data is None:
             raise ValueError(f"[数据层错误] YAML 文件内容为空: {path}")
-        return data
+        return copy.deepcopy(data)  # 防篡改：每次返回独立副本
 
     def write_yaml(self, file_path, data) -> None:
         """将数据写回 YAML 文件（用于数据备份/动态调整场景）"""

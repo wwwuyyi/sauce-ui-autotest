@@ -7,10 +7,10 @@ data_util.py —— 测试数据工具（工具层）
 
 使用：from utils.data_util import get_product
 """
-from utils.yaml_util import YamlUtil
+from utils.config_util import get_effective_config
 
-# 环境配置（复用 YamlUtil 单例缓存，与会话内其它读取共享同一份，无重复 IO）
-CONFIG = YamlUtil().read_yaml("config/env.yaml")
+# 环境配置（模块内独立副本；YamlUtil 文件缓存保证无重复 IO）
+CONFIG = get_effective_config()
 
 
 def get_product(product_id: int) -> dict:

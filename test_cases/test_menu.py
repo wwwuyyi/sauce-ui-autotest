@@ -20,12 +20,12 @@ import pytest
 from pages.cart_page import CartPage
 from pages.item_page import ItemPage
 from pages.menu_page import MenuPage
+from utils.config_util import get_effective_config
 from utils.data_util import get_product
-from utils.yaml_util import YamlUtil
 
 logger = logging.getLogger(__name__)
 
-CONFIG = YamlUtil().read_yaml("config/env.yaml")
+CONFIG = get_effective_config()
 NOT_LOGIN_SUBS = CONFIG["expected"]["error_messages"]["not_login_substrings"]
 
 

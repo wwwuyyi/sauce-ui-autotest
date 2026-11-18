@@ -20,12 +20,12 @@ from selenium.common.exceptions import TimeoutException
 
 from pages.cart_page import CartPage
 from pages.inventory_page import InventoryPage
+from utils.config_util import get_effective_config
 from utils.data_util import get_product
-from utils.yaml_util import YamlUtil
 
 logger = logging.getLogger(__name__)
 
-CONFIG = YamlUtil().read_yaml("config/env.yaml")
+CONFIG = get_effective_config()
 
 
 def _prepare_cart(inventory_page, page_factory):

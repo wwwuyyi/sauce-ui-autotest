@@ -20,12 +20,12 @@ import allure
 import pytest
 
 from utils.allure_util import set_severity_from_str
+from utils.config_util import get_effective_config
 from utils.data_util import get_product
-from utils.yaml_util import YamlUtil
 
 logger = logging.getLogger(__name__)
 
-CONFIG = YamlUtil().read_yaml("config/env.yaml")
+CONFIG = get_effective_config()
 
 # 价格展示格式：$ 开头 + 数字 + 可选两位小数（SAUCE-INV-001 格式校验基准）
 PRICE_PATTERN = re.compile(r"^\$\d+(\.\d{2})?$")
