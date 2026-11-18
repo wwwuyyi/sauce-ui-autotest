@@ -65,8 +65,34 @@ def pytest_configure(config):
     ALLURE_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _cleanup_old_screenshots(retention_days: int) -> None:
+    """清理 reports/screenshots 下超过保留期的 png/gif（会话开始时执行）
+
+    只处理 png/gif，其他文件一律不动；单个文件删除失败仅告警，不阻断会话。
+    xdist 下由 controller 进程执行一次（worker 进程跳过），避免多进程并发删除。
+    """
+    if not SCREENSHOT_DIR.is_dir():
+        return
+    cutoff = datetime.now().timestamp() - retention_days * 24 * 3600
+    removed = 0
+    for pattern in ("*.png", "*.gif"):
+        for path in SCREENSHOT_DIR.glob(pattern):
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink()
+                    removed += 1
+            except OSError as exc:
+                logger.warning("旧截图清理失败: %s（%s）", path, exc)
+    logger.info("截图目录清理完成：删除 %d 个超过 %d 天的 png/gif", removed, retention_days)
+
+
 def pytest_sessionstart(session):
-    """会话开始：向 Allure 结果目录写入环境信息（报告页 Environment 区块展示）"""
+    """会话开始：清理过期截图，并向 Allure 结果目录写入环境信息"""
+    # xdist worker 均带 PYTEST_XDIST_WORKER 环境变量；仅 controller 执行清理
+    if not os.environ.get("PYTEST_XDIST_WORKER"):
+        retention_days = (CONFIG.get("screenshots", {}) or {}).get("retention_days", 15)
+        _cleanup_old_screenshots(retention_days)
+
     env_file = ALLURE_RESULTS_DIR / "environment.properties"
     content = (
         f"env={CONFIG['env']['name']}\n"
