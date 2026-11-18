@@ -55,8 +55,14 @@ class BasePage:
         self.poll_frequency = poll_frequency
 
     def _wait(self, timeout: Optional[int] = None) -> WebDriverWait:
-        """构造显式等待对象（内部私有方法，统一超时与轮询参数）"""
-        return WebDriverWait(self.driver, timeout or self.timeout, self.poll_frequency)
+        """构造显式等待对象（内部私有方法，统一超时与轮询参数）
+
+        仅 timeout is None 才回退到实例默认值；显式传 0 按 0 处理
+        （WebDriverWait 超时 0 = 单次探测）。旧实现用 `timeout or self.timeout`，
+        会把显式 0 误解析为默认 10s，使"即时探测"谓词在条件不成立时空转满预算。
+        """
+        wait_timeout = self.timeout if timeout is None else timeout
+        return WebDriverWait(self.driver, wait_timeout, self.poll_frequency)
 
     # ===================== 元素查找（显式等待） =====================
 
