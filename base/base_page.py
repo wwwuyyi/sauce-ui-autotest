@@ -16,7 +16,7 @@ iframe/窗口/鼠标/JS/截图等），不包含任何业务逻辑。
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import allure
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, TimeoutException
@@ -143,16 +143,27 @@ class BasePage:
             self.save_screenshot("click_fail")
             raise
 
-    def click_until(self, locator: Locator, success, timeout: int = 10,
-                    js_timeout: int = 5, retries: int = 1,
-                    fail_message: str = "点击后未达到成功条件") -> None:
-        """点击并等待业务成功条件；原生点击被前端吞掉时用 JS 派发 click 兜底
+    def click_robust(self, locator: Locator, success: Callable[[], bool],
+                     timeout: int = 10, js_timeout: int = 5, retries: int = 1,
+                     fail_message: str = "点击后未达到成功条件",
+                     post_js_recheck: Optional[Callable[[], bool]] = None,
+                     retry_allowed: Optional[Callable[[], bool]] = None,
+                     before_retry: Optional[Callable[[], None]] = None,
+                     on_final_failure: Optional[Callable[[], Optional[bool]]] = None) -> None:
+        """统一健壮点击原语：原生点击 → 业务成功校验 → JS 点击 → 页面钩子 → 重试
 
         CI 无头 Chrome 偶发输入事件丢失：WebDriver 报告点击成功，但页面从未处理
         （控制台无任何 JS 报错、元素状态不变）。此方法用业务成功条件判定点击是否
         真正生效，未生效时改用 JS 直接派发 click（不依赖输入坐标与命中测试链路）。
 
-        :param success: 无参可调用对象，返回 True 表示点击已生效
+        页面特有兜底通过可选钩子注入，保持各页面方法对外语义不变：
+        :param success:          无参可调用对象，返回 True 表示点击已生效
+        :param post_js_recheck:  JS 点击仍未生效后的页面级复核（如刷新重渲染），
+                                 返回 True 表示已恢复；异常按原语义向上传播
+        :param retry_allowed:    是否允许进入下一轮重试（如按钮/入口仍在页面上）
+        :param before_retry:     重试前的页面准备（如菜单收起后重新展开）
+        :param on_final_failure: 重试/兜底均未生效时的最终处理；返回 True 表示
+                                 已由页面兜底接管（如 URL 直达），方法正常返回
         """
         for attempt in range(retries + 1):
             self.click(locator)
@@ -166,9 +177,24 @@ class BasePage:
             if self._poll_success(success, js_timeout):
                 logger.info("JS 点击后已生效: %s", locator)
                 return
-            if attempt < retries:
+            if post_js_recheck is not None and post_js_recheck():
+                logger.info("页面级复核后点击已生效: %s", locator)
+                return
+            if attempt < retries and (retry_allowed is None or retry_allowed()):
+                if before_retry is not None:
+                    before_retry()
                 logger.warning("第 %d 次重试点击: %s", attempt + 1, locator)
-        raise TimeoutException(f"{fail_message}: {locator}")
+                continue
+            if on_final_failure is not None and on_final_failure():
+                return
+            raise TimeoutException(f"{fail_message}: {locator}")
+
+    def click_until(self, locator: Locator, success, timeout: int = 10,
+                    js_timeout: int = 5, retries: int = 1,
+                    fail_message: str = "点击后未达到成功条件") -> None:
+        """兼容入口：无页面钩子的健壮点击，委托 click_robust 实现"""
+        self.click_robust(locator, success, timeout=timeout, js_timeout=js_timeout,
+                          retries=retries, fail_message=fail_message)
 
     def _poll_success(self, success, timeout: int) -> bool:
         """轮询成功条件（success 为无参可调用对象）；超时返回 False"""

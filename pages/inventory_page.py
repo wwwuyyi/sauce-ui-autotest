@@ -158,38 +158,25 @@ class InventoryPage(BasePage):
         3. 点击彻底丢失：加购按钮仍在时重试点击（默认 1 次）。
         全部兜底仍失败时采集现场诊断（坐标/命中元素/购物车存储）并附件进 Allure。
         """
-        for attempt in range(retries + 1):
-            self.click(self.add_button(slug))
-            if self._wait_remove_visible(slug, timeout=self.ADD_CONFIRM_TIMEOUT):
-                return
-            # 兜底一：JS 触发 click（覆盖"原生点击未被前端处理"）
-            logger.warning("加购[%s]原生点击未生效，改用 JS 触发点击复核", slug)
-            self.js_click(self.add_button(slug))
-            if self._wait_remove_visible(slug, timeout=5):
-                logger.info("JS 点击后加购[%s]已生效", slug)
-                return
-            # 兜底二：刷新页面复核（覆盖"已入车但按钮未重渲染"的前端不同步）
+
+        def _refresh_and_recheck() -> bool:
+            """兜底二：刷新页面复核（覆盖"已入车但按钮未重渲染"的前端不同步）"""
             logger.warning("加购[%s]仍未生效，刷新页面重渲染后复核", slug)
             self.refresh()
             self.wait_inventory_loaded()
-            if self._wait_remove_visible(slug, timeout=3):
-                logger.info("刷新后加购[%s]状态已恢复", slug)
-                return
-            # 兜底三：仍未入车（点击被吞），加购按钮仍在时重试点击
-            if attempt < retries and not self.is_add_button_absent(slug):
-                logger.warning("加购[%s]初判未生效，第 %d 次重试点击", slug, attempt + 1)
-                continue
-            self._attach_add_diagnostics(slug)
-            raise TimeoutException(
-                f"加购[{slug}]失败：原生点击/JS 点击/刷新复核均未生效")
+            return self.is_element_visible(self.remove_button(slug), timeout=3)
 
-    def _wait_remove_visible(self, slug: str, timeout: int) -> bool:
-        """等待 Remove 按钮可见（加购生效标志）；超时返回 False，不抛异常"""
-        try:
-            self.find_element(self.remove_button(slug), timeout=timeout)
-            return True
-        except TimeoutException:
-            return False
+        self.click_robust(
+            self.add_button(slug),
+            lambda: self.is_element_visible(self.remove_button(slug), timeout=0),
+            timeout=self.ADD_CONFIRM_TIMEOUT,
+            js_timeout=5,
+            retries=retries,
+            post_js_recheck=_refresh_and_recheck,
+            retry_allowed=lambda: not self.is_add_button_absent(slug),
+            on_final_failure=lambda: self._attach_add_diagnostics(slug),
+            fail_message=f"加购[{slug}]失败：原生点击/JS 点击/刷新复核均未生效",
+        )
 
     def _attach_add_diagnostics(self, slug: str) -> None:
         """采集加购失败现场诊断（按钮坐标/命中元素/购物车存储/按钮清单）并附件进 Allure"""
@@ -230,27 +217,15 @@ class InventoryPage(BasePage):
 
         原生点击 → JS 派发 click（CI 无头 Chrome 偶发输入事件丢失）→ 重试点击（默认 1 次）。
         """
-        for attempt in range(retries + 1):
-            self.click(self.remove_button(slug))
-            if self._wait_add_visible(slug, timeout=10):
-                return
-            logger.warning("移除[%s]原生点击未生效，改用 JS 触发点击复核", slug)
-            self.js_click(self.remove_button(slug))
-            if self._wait_add_visible(slug, timeout=5):
-                logger.info("JS 点击后移除[%s]已生效", slug)
-                return
-            if attempt < retries and not self.is_remove_button_absent(slug):
-                logger.warning("移除[%s]初判未生效，第 %d 次重试点击", slug, attempt + 1)
-                continue
-            raise TimeoutException(f"移除[{slug}]失败：原生点击/JS 点击均未生效")
-
-    def _wait_add_visible(self, slug: str, timeout: int) -> bool:
-        """等待加购按钮恢复可见（移除生效标志）；超时返回 False，不抛异常"""
-        try:
-            self.find_element(self.add_button(slug), timeout=timeout)
-            return True
-        except TimeoutException:
-            return False
+        self.click_robust(
+            self.remove_button(slug),
+            lambda: self.is_element_visible(self.add_button(slug), timeout=0),
+            timeout=10,
+            js_timeout=5,
+            retries=retries,
+            retry_allowed=lambda: not self.is_remove_button_absent(slug),
+            fail_message=f"移除[{slug}]失败：原生点击/JS 点击均未生效",
+        )
 
     def wait_remove_visible(self, slug: str) -> None:
         """等待移除按钮出现（加购成功标志）"""
@@ -343,28 +318,16 @@ class InventoryPage(BasePage):
         （点击成功但详情页不加载）。兜底顺序：原生点击 → JS 派发 click →
         重试原生点击（默认 1 次）。标题链接消失 = 已离开列表页。
         """
-        for attempt in range(retries + 1):
-            self.click(self.product_title_link(product_id))
-            if self._wait_link_gone(product_id, timeout=10):
-                return
-            logger.warning("点击商品[%s]未离开列表页，改用 JS 触发点击复核", product_id)
-            self.js_click(self.product_title_link(product_id))
-            if self._wait_link_gone(product_id, timeout=5):
-                logger.info("JS 点击后已进入商品详情页")
-                return
-            if attempt < retries and self.get_element_count_immediate(
-                    self.product_title_link(product_id)) > 0:
-                logger.warning("第 %d 次重试点击商品[%s]", attempt + 1, product_id)
-                continue
-            raise TimeoutException(f"点击商品[{product_id}]后未离开列表页（原生/JS 点击均无效）")
-
-    def _wait_link_gone(self, product_id: int, timeout: int) -> bool:
-        """等待商品标题链接消失（已离开列表页）；超时返回 False，不抛异常"""
-        try:
-            self.wait_element_disappear(self.product_title_link(product_id), timeout=timeout)
-            return True
-        except TimeoutException:
-            return False
+        link = self.product_title_link(product_id)
+        self.click_robust(
+            link,
+            lambda: not self.is_element_visible(link, timeout=0),
+            timeout=10,
+            js_timeout=5,
+            retries=retries,
+            retry_allowed=lambda: self.get_element_count_immediate(link) > 0,
+            fail_message=f"点击商品[{product_id}]后未离开列表页（原生/JS 点击均无效）",
+        )
 
     def open_cart(self, retries: int = 1, fallback_url: str = None) -> None:
         """点击购物车图标进入购物车页（URL 进入购物车页为成功标志）
@@ -374,31 +337,24 @@ class InventoryPage(BasePage):
         兜底顺序：原生点击 → JS 派发 click → 重试原生点击（默认 1 次）→
         fallback_url URL 直达——购物车状态存于 localStorage，直达与点击导航等价。
         """
-        for attempt in range(retries + 1):
-            self.click(self.CART_LINK)
-            if self._wait_cart_url(timeout=10):
-                return
-            logger.warning("点击购物车图标后未跳转（站点 SPA 路由无响应），改用 JS 触发点击复核")
-            self.js_click(self.CART_LINK)
-            if self._wait_cart_url(timeout=5):
-                logger.info("JS 点击后已进入购物车页")
-                return
-            if attempt < retries:
-                logger.warning("第 %d 次重试点击购物车图标", attempt + 1)
-                continue
-            if fallback_url:
-                logger.warning("重试用尽仍未跳转，改用 URL 直达购物车页: %s", fallback_url)
-                self.open_url(fallback_url)
-                return
-            raise TimeoutException("点击购物车图标后未进入购物车页（原生/JS 点击均无效）")
 
-    def _wait_cart_url(self, timeout: int) -> bool:
-        """等待当前 URL 进入购物车页；超时返回 False，不抛异常"""
-        try:
-            self.wait_url_contains("/cart.html", timeout=timeout)
+        def _url_fallback() -> bool:
+            """重试用尽仍未跳转时 URL 直达（无 fallback_url 则交给统一异常）"""
+            if not fallback_url:
+                return False
+            logger.warning("重试用尽仍未跳转，改用 URL 直达购物车页: %s", fallback_url)
+            self.open_url(fallback_url)
             return True
-        except TimeoutException:
-            return False
+
+        self.click_robust(
+            self.CART_LINK,
+            lambda: "/cart.html" in self.get_current_url(),
+            timeout=10,
+            js_timeout=5,
+            retries=retries,
+            on_final_failure=_url_fallback,
+            fail_message="点击购物车图标后未进入购物车页（原生/JS 点击均无效）",
+        )
 
     def get_shopping_cart_rect(self) -> dict:
         """购物车图标位置矩形（visual_user 布局偏移探针基线采集用）"""

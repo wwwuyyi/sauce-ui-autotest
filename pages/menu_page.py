@@ -164,41 +164,32 @@ class MenuPage(BasePage):
         登录页 URL（HTTP 直达，绕开卡死的页面 JS 导航依赖），再等待 user-name 可见。
         退出是幂等操作，兜底无副作用；未提供 fallback_url 时原样抛出最后一次超时。
         """
-        last_exc = None
-        for attempt in range(retries + 1):
-            self.click(self.LOGOUT)
-            try:
-                # 主路径：登录页 user-name 输入框可见 = 已成功跳转回登录页（唯一权威校验）
-                self.find_element(LoginPage.USERNAME_INPUT)
-                return
-            except TimeoutException as exc:
-                last_exc = exc
-                # 兜底一：JS 直接派发 click（菜单收起后 Logout 节点仍在 DOM，
-                # JS 点击不依赖画布可见性，可绕开 CI 上偶发的输入事件丢失）
-                logger.warning("点击 Logout 后未跳转，改用 JS 触发点击复核")
-                try:
-                    self.js_click(self.LOGOUT)
-                    self.find_element(LoginPage.USERNAME_INPUT, timeout=5)
-                    return
-                except Exception as js_exc:  # 兜底失败不改变主流程异常语义
-                    logger.warning("JS 点击 Logout 未生效: %s", js_exc)
-                # 仍停留在商品页（菜单容器还在 DOM）时才重试点击：首次点击后菜单已自动收起
-                # （Logout 仍在 DOM 但移出画布不可点击），需重新展开菜单再补点
-                if attempt < retries and self.get_element_count_immediate(self.MENU_WRAP) > 0:
-                    logger.warning("点击 Logout 后未跳转出登录态（站点导航无响应），第 %d 次重试点击",
-                                   attempt + 1)
-                    if self.is_menu_closed():
-                        self.open_menu()
-                    continue
-                # 重试用尽或 Logout 已不可点击：跳出循环
-                break
+        def _reopen_menu_if_closed() -> None:
+            """首次点击后菜单已自动收起（Logout 仍在 DOM 但移出画布不可点击），补点前重新展开"""
+            if self.is_menu_closed():
+                self.open_menu()
 
-        if not fallback_url:
-            raise last_exc
+        def _cookie_fallback() -> bool:
+            """兜底：删除会话 Cookie 后直开登录页 URL，强制导航回登录页，再等待输入框可见"""
+            if not fallback_url:
+                return False
+            logger.warning("点击 Logout 重试用尽仍未回到登录页（站点 JS 卡死/导航无响应），"
+                           "兜底：清除 Cookie 并直达登录页 URL: %s", fallback_url)
+            self.delete_all_cookies()
+            self.open_url(fallback_url)
+            self.find_element(LoginPage.USERNAME_INPUT)
+            return True
 
-        # 兜底方案：删除会话 Cookie 后直开登录页 URL，强制导航回登录页，再等待输入框可见
-        logger.warning("点击 Logout 重试用尽仍未回到登录页（站点 JS 卡死/导航无响应），"
-                       "兜底：清除 Cookie 并直达登录页 URL: %s", fallback_url)
-        self.delete_all_cookies()
-        self.open_url(fallback_url)
-        self.find_element(LoginPage.USERNAME_INPUT)
+        self.click_robust(
+            self.LOGOUT,
+            # 主路径：登录页 user-name 输入框可见 = 已成功跳转回登录页（唯一权威校验）
+            lambda: self.is_element_visible(LoginPage.USERNAME_INPUT, timeout=0),
+            timeout=self.timeout,
+            js_timeout=5,
+            retries=retries,
+            # 仍停留在商品页（菜单容器还在 DOM）时才重试点击
+            retry_allowed=lambda: self.get_element_count_immediate(self.MENU_WRAP) > 0,
+            before_retry=_reopen_menu_if_closed,
+            on_final_failure=_cookie_fallback,
+            fail_message="点击 Logout 后未跳转回登录页（原生/JS 点击均无效）",
+        )

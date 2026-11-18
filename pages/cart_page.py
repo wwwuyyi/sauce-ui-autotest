@@ -10,7 +10,6 @@ cart_page.py —— 购物车页对象（Page 对象层）
 """
 import logging
 
-from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
 from base.base_page import BasePage
@@ -86,28 +85,23 @@ class CartPage(BasePage):
 
     def remove_item(self, slug: str) -> None:
         """删除购物车中的商品（原生点击 → JS 兜底 → 刷新复核）"""
-        self.click(self.remove_button(slug))
-        if self._wait_item_removed(slug, timeout=10):
-            return
-        logger.warning("删除[%s]原生点击未生效，改用 JS 触发点击复核", slug)
-        self.js_click(self.remove_button(slug))
-        if self._wait_item_removed(slug, timeout=5):
-            logger.info("JS 点击后删除[%s]已生效", slug)
-            return
-        logger.warning("删除[%s]仍未生效，刷新页面后复核", slug)
-        self.refresh()
-        self.wait_cart_page_loaded()
-        if self._wait_item_removed(slug, timeout=5):
-            return
-        raise TimeoutException(f"删除购物车商品[{slug}]失败（原生/JS 点击均未生效）")
 
-    def _wait_item_removed(self, slug: str, timeout: int) -> bool:
-        """等待商品行移除按钮消失；超时返回 False，不抛异常"""
-        try:
-            self.wait_element_disappear(self.remove_button(slug), timeout=timeout)
-            return True
-        except TimeoutException:
-            return False
+        def _refresh_and_recheck() -> bool:
+            """刷新页面后复核商品行是否已移除（覆盖前端状态不同步）"""
+            logger.warning("删除[%s]仍未生效，刷新页面后复核", slug)
+            self.refresh()
+            self.wait_cart_page_loaded()
+            return not self.is_element_visible(self.remove_button(slug), timeout=5)
+
+        self.click_robust(
+            self.remove_button(slug),
+            lambda: not self.is_element_visible(self.remove_button(slug), timeout=0),
+            timeout=10,
+            js_timeout=5,
+            retries=0,  # 与改造前一致：删除动作单轮执行，不做重复点击
+            post_js_recheck=_refresh_and_recheck,
+            fail_message=f"删除购物车商品[{slug}]失败（原生/JS 点击均未生效）",
+        )
 
     def continue_shopping(self) -> None:
         """点击继续购物按钮（商品列表可见 = 成功；原生点击 → JS 兜底）"""
@@ -124,24 +118,12 @@ class CartPage(BasePage):
         离开购物车页（Checkout 按钮消失）为成功标志；兜底顺序：
         原生点击 → JS 派发 click → 重试原生点击（默认 1 次）。
         """
-        for attempt in range(retries + 1):
-            self.click(self.CHECKOUT)
-            if self._wait_checkout_left(timeout=10):
-                return
-            logger.warning("点击 Checkout 后未离开购物车页（站点导航无响应），改用 JS 触发点击复核")
-            self.js_click(self.CHECKOUT)
-            if self._wait_checkout_left(timeout=5):
-                logger.info("JS 点击后已进入结算第一步")
-                return
-            if attempt < retries and self.get_element_count_immediate(self.CHECKOUT) > 0:
-                logger.warning("第 %d 次重试点击 Checkout", attempt + 1)
-                continue
-            raise TimeoutException("点击 Checkout 后未离开购物车页（原生/JS 点击均无效）")
-
-    def _wait_checkout_left(self, timeout: int) -> bool:
-        """等待 Checkout 按钮消失（已离开购物车页）；超时返回 False，不抛异常"""
-        try:
-            self.wait_element_disappear(self.CHECKOUT, timeout=timeout)
-            return True
-        except TimeoutException:
-            return False
+        self.click_robust(
+            self.CHECKOUT,
+            lambda: not self.is_element_visible(self.CHECKOUT, timeout=0),
+            timeout=10,
+            js_timeout=5,
+            retries=retries,
+            retry_allowed=lambda: self.get_element_count_immediate(self.CHECKOUT) > 0,
+            fail_message="点击 Checkout 后未离开购物车页（原生/JS 点击均无效）",
+        )
