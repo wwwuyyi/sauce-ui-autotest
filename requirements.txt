@@ -4,6 +4,7 @@
 # =====================================================================
 selenium==4.25.0        # Web UI 自动化（Selenium Manager 自动管理浏览器驱动）
 pytest==8.3.4           # 测试框架
+pytest-xdist==3.6.1     # 并行执行（本地 -n auto / CI 多 worker，进程级隔离）
 pytest-rerunfailures==14.0  # 失败自动重跑（CI 吸收公共演示站偶发抖动，--reruns 1）
 allure-pytest==2.13.5   # Allure 测试报告（含 --alluredir / --clean-alluredir 参数）
 PyYAML==6.0.3           # YAML 数据驱动（env.yaml 配置与用例数据解析）
