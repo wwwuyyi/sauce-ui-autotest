@@ -76,8 +76,10 @@ def load_cases(results_dir: Path) -> list:
     """解析全部 *-result.json，并合并 container 中的 fixture 级附件
 
     去重：pytest-rerunfailures 每次重跑都会写一份 result.json（同一用例出现多条），
-    这里按 testCaseId 只保留最后一次尝试的结果，避免报告条目数量虚高、
-    也避免"重跑通过但前一次失败"同时出现造成的误读。
+    这里只保留最后一次尝试的结果，避免报告条目数量虚高、也避免
+    "重跑通过但前一次失败"同时出现造成的误读。
+    去重键必须是 historyId：它包含参数化数据（同一函数的不同参数实例不同），
+    而 testCaseId 在参数化实例间相同——用它去重会把参数化用例合并成一条。
     """
     cases = []
     for f in sorted(results_dir.glob("*-result.json")):
@@ -88,7 +90,7 @@ def load_cases(results_dir: Path) -> list:
 
     latest = {}
     for case in cases:
-        key = case.get("testCaseId") or case.get("historyId") or case.get("uuid")
+        key = case.get("historyId") or case.get("testCaseId") or case.get("uuid")
         prev = latest.get(key)
         if prev is None or (case.get("start") or 0) >= (prev.get("start") or 0):
             latest[key] = case

@@ -128,6 +128,9 @@ def driver(request, config):
     try:
         if browser_name == "chrome":
             options = webdriver.ChromeOptions()
+            # 开启浏览器控制台日志采集：用例失败时把前端报错附件进 Allure，便于定位
+            # "点击命令成功但页面无响应"这类前端异常（只影响诊断，不影响执行）
+            options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
             if headless:
                 options.add_argument("--headless=new")  # Chrome 109+ 官方无头模式参数
                 # CI 容器必备参数：GitHub runner 以 root 运行、无用户级沙箱，缺 --no-sandbox
@@ -135,6 +138,8 @@ def driver(request, config):
                 # 内存改走 /tmp，解决云端 runner 内存不足导致页面渲染卡住、点击失效的连锁超时
                 options.add_argument("--no-sandbox")
                 options.add_argument("--disable-dev-shm-usage")
+                # 固定设备像素比为 1：避免 runner 缩放设置导致点击坐标与元素位置错位
+                options.add_argument("--force-device-scale-factor=1")
             if browser_conf.get("window_size"):
                 options.add_argument(f"--window-size={browser_conf['window_size']}")
             driver_obj = webdriver.Chrome(options=options)  # Selenium 4 标准构造方式
@@ -339,3 +344,16 @@ def pytest_runtest_makereport(item, call):
                         )
                 except Exception as exc:
                     logger.error("失败录屏附件写入异常: %s", exc)
+
+        # 浏览器控制台日志：前端报错（React 异常/资源失败）是"点击无响应"类问题的关键线索
+        try:
+            console_logs = driver_instance.get_log("browser")
+            if console_logs:
+                lines = [f"[{entry.get('level')}] {entry.get('message')}" for entry in console_logs]
+                allure.attach("\n".join(lines[-300:]),
+                              name="浏览器控制台日志",
+                              attachment_type=allure.attachment_type.TEXT)
+                logger.error("浏览器控制台日志（末 %d 条）:\n%s",
+                             min(len(lines), 300), "\n".join(lines[-30:]))
+        except Exception as exc:  # 非 Chrome 浏览器/会话已关闭时忽略
+            logger.warning("浏览器控制台日志采集失败: %s", exc)

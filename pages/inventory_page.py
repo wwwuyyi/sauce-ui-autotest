@@ -10,9 +10,11 @@ inventory_page.py —— 商品列表页对象（Page 对象层）
 - 商品块无 data-test，使用 .inventory_item 系列 class；
 - 加购/移除按钮的 data-test 值由商品 slug 动态拼接。
 """
+import json
 import logging
 from decimal import Decimal
 
+import allure
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
@@ -23,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 class InventoryPage(BasePage):
     """商品列表页对象：商品展示/排序/加购/移除/购物车角标"""
+
+    # 加购后等待按钮切换的快速预算（秒）：前端状态变更应秒级完成，超时即进入多级兜底
+    ADD_CONFIRM_TIMEOUT = 10
 
     # ===================== 元素定位 =====================
     PRODUCT_SORT = (By.CSS_SELECTOR, "select[data-test='product-sort-container']")  # 排序下拉框
@@ -146,29 +151,79 @@ class InventoryPage(BasePage):
     def add_to_cart(self, slug: str, retries: int = 1) -> None:
         """加购单个商品并等待按钮切换为 Remove（功能正常站点）
 
-        健壮性：偶发"点击后按钮未切换"，按两种成因分别兜底：
-        1. 已入车但商品卡片未重渲染（新版 React 站点状态树偶发不同步）：
-           购物车状态存于 localStorage，刷新页面即可取回并恢复按钮态，刷新后复核；
-        2. 点击被吞（未入车）：加购按钮仍在 DOM 时重新点击（默认 1 次）。
+        健壮性（按失效成因逐级兜底，每级均带独立等待预算）：
+        1. 原生 click 未被前端响应（CI 无头 Chrome 偶发：点击命令成功但 React 未处理）：
+           改用 JS 直接派发 click 事件，绕过输入坐标/命中测试链路；
+        2. 已入车但商品卡片未重渲染（前端状态树不同步）：刷新页面从 localStorage 取回状态；
+        3. 点击彻底丢失：加购按钮仍在时重试点击（默认 1 次）。
+        全部兜底仍失败时采集现场诊断（坐标/命中元素/购物车存储）并附件进 Allure。
         """
         for attempt in range(retries + 1):
             self.click(self.add_button(slug))
-            try:
-                self.find_element(self.remove_button(slug))
+            if self._wait_remove_visible(slug, timeout=self.ADD_CONFIRM_TIMEOUT):
                 return
-            except TimeoutException:
-                # 兜底一：刷新页面后复核（覆盖"已入车但按钮未重渲染"的前端不同步）
-                logger.warning("加购[%s]后按钮未切换，刷新页面重渲染后复核", slug)
-                self.refresh()
-                self.wait_inventory_loaded()
-                if self.is_element_present(self.remove_button(slug), timeout=3):
-                    logger.info("刷新后加购[%s]状态已恢复", slug)
-                    return
-                # 兜底二：仍未入车（点击被吞），加购按钮仍在时重试点击
-                if attempt < retries and not self.is_add_button_absent(slug):
-                    logger.warning("加购[%s]初判未生效，第 %d 次重试点击", slug, attempt + 1)
-                    continue
-                raise
+            # 兜底一：JS 触发 click（覆盖"原生点击未被前端处理"）
+            logger.warning("加购[%s]原生点击未生效，改用 JS 触发点击复核", slug)
+            self.js_click(self.add_button(slug))
+            if self._wait_remove_visible(slug, timeout=5):
+                logger.info("JS 点击后加购[%s]已生效", slug)
+                return
+            # 兜底二：刷新页面复核（覆盖"已入车但按钮未重渲染"的前端不同步）
+            logger.warning("加购[%s]仍未生效，刷新页面重渲染后复核", slug)
+            self.refresh()
+            self.wait_inventory_loaded()
+            if self._wait_remove_visible(slug, timeout=3):
+                logger.info("刷新后加购[%s]状态已恢复", slug)
+                return
+            # 兜底三：仍未入车（点击被吞），加购按钮仍在时重试点击
+            if attempt < retries and not self.is_add_button_absent(slug):
+                logger.warning("加购[%s]初判未生效，第 %d 次重试点击", slug, attempt + 1)
+                continue
+            self._attach_add_diagnostics(slug)
+            raise TimeoutException(
+                f"加购[{slug}]失败：原生点击/JS 点击/刷新复核均未生效")
+
+    def _wait_remove_visible(self, slug: str, timeout: int) -> bool:
+        """等待 Remove 按钮可见（加购生效标志）；超时返回 False，不抛异常"""
+        try:
+            self.find_element(self.remove_button(slug), timeout=timeout)
+            return True
+        except TimeoutException:
+            return False
+
+    def _attach_add_diagnostics(self, slug: str) -> None:
+        """采集加购失败现场诊断（按钮坐标/命中元素/购物车存储/按钮清单）并附件进 Allure"""
+        selector = self.add_button(slug)[1]
+        script = """
+        const s = arguments[0];
+        const el = document.querySelector(s);
+        const out = {selector: s, url: location.href,
+                     scrollX: window.scrollX, scrollY: window.scrollY,
+                     dpr: window.devicePixelRatio,
+                     cart: (() => { try { return localStorage.getItem('cart-contents'); }
+                                    catch (e) { return 'ERR:' + e.name; } })()};
+        if (!el) { out.found = false; return out; }
+        const r = el.getBoundingClientRect();
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        const hit = document.elementFromPoint(cx, cy);
+        out.found = true;
+        out.rect = {x: r.x, y: r.y, width: r.width, height: r.height};
+        out.hit = hit ? {tag: hit.tagName, cls: String(hit.className || ''),
+                         test: hit.getAttribute('data-test')} : null;
+        out.addButtons = Array.from(document.querySelectorAll("[data-test^='add-to-cart-']"))
+                              .map(b => b.getAttribute('data-test'));
+        out.removeButtons = Array.from(document.querySelectorAll("[data-test^='remove-']"))
+                                 .map(b => b.getAttribute('data-test'));
+        return out;
+        """
+        try:
+            info = self.execute_script(script, selector)
+            logger.error("加购失败现场诊断: %s", json.dumps(info, ensure_ascii=False))
+            allure.attach(json.dumps(info, ensure_ascii=False, indent=2),
+                          name=f"加购失败诊断_{slug}",
+                          attachment_type=allure.attachment_type.JSON)
+        except Exception as exc:  # 诊断失败不影响原异常抛出
+            logger.warning("加购失败诊断采集异常: %s", exc)
 
     def remove_from_cart(self, slug: str, retries: int = 1) -> None:
         """移除单个商品并等待按钮恢复为加购（按钮未恢复时自动重试点击，同加购健壮性）"""
