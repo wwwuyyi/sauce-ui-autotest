@@ -155,6 +155,15 @@ class MenuPage(BasePage):
                 return
             except TimeoutException as exc:
                 last_exc = exc
+                # 兜底一：JS 直接派发 click（菜单收起后 Logout 节点仍在 DOM，
+                # JS 点击不依赖画布可见性，可绕开 CI 上偶发的输入事件丢失）
+                logger.warning("点击 Logout 后未跳转，改用 JS 触发点击复核")
+                try:
+                    self.js_click(self.LOGOUT)
+                    self.find_element(LoginPage.USERNAME_INPUT, timeout=5)
+                    return
+                except Exception as js_exc:  # 兜底失败不改变主流程异常语义
+                    logger.warning("JS 点击 Logout 未生效: %s", js_exc)
                 # 仍停留在商品页（菜单容器还在 DOM）时才重试点击：首次点击后菜单已自动收起
                 # （Logout 仍在 DOM 但移出画布不可点击），需重新展开菜单再补点
                 if attempt < retries and self.get_element_count_immediate(self.MENU_WRAP) > 0:

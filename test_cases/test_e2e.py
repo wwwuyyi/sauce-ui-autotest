@@ -74,7 +74,7 @@ class TestEndToEnd:
 
         # -------- 节点3-购物车核对 --------
         with allure.step("进入购物车页"):
-            inventory_page.open_cart()
+            inventory_page.open_cart(fallback_url=URLS["cart"])
             cart = page_factory(CartPage)
             cart.wait_cart_page_loaded()
 

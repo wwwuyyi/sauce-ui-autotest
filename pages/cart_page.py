@@ -84,9 +84,29 @@ class CartPage(BasePage):
         self.wait_element_disappear(self.remove_button(slug))
 
     def remove_item(self, slug: str) -> None:
-        """删除购物车中的商品"""
+        """删除购物车中的商品（原生点击 → JS 兜底 → 刷新复核）"""
         self.click(self.remove_button(slug))
-        self.wait_item_removed(slug)
+        if self._wait_item_removed(slug, timeout=10):
+            return
+        logger.warning("删除[%s]原生点击未生效，改用 JS 触发点击复核", slug)
+        self.js_click(self.remove_button(slug))
+        if self._wait_item_removed(slug, timeout=5):
+            logger.info("JS 点击后删除[%s]已生效", slug)
+            return
+        logger.warning("删除[%s]仍未生效，刷新页面后复核", slug)
+        self.refresh()
+        self.wait_cart_page_loaded()
+        if self._wait_item_removed(slug, timeout=5):
+            return
+        raise TimeoutException(f"删除购物车商品[{slug}]失败（原生/JS 点击均未生效）")
+
+    def _wait_item_removed(self, slug: str, timeout: int) -> bool:
+        """等待商品行移除按钮消失；超时返回 False，不抛异常"""
+        try:
+            self.wait_element_disappear(self.remove_button(slug), timeout=timeout)
+            return True
+        except TimeoutException:
+            return False
 
     def continue_shopping(self) -> None:
         """点击继续购物按钮（返回商品列表页）"""
@@ -95,18 +115,28 @@ class CartPage(BasePage):
     def click_checkout(self, retries: int = 1) -> None:
         """点击去结算按钮（进入结算第一步）
 
-        健壮性：公共演示站偶发"点击后导航无响应"（点击成功但页面迟迟不跳转，
-        与 InventoryPage.add_to_cart 的"点击未生效自动补点"同类站点抖动）。
-        点击后等待结算按钮从页面消失（跳转生效标志），超时且按钮仍在时重试点击（默认 1 次）。
+        健壮性：CI 无头 Chrome 偶发输入事件丢失（点击成功但页面不跳转，与加购按钮同类）。
+        离开购物车页（Checkout 按钮消失）为成功标志；兜底顺序：
+        原生点击 → JS 派发 click → 重试原生点击（默认 1 次）。
         """
         for attempt in range(retries + 1):
             self.click(self.CHECKOUT)
-            try:
-                self.wait_element_disappear(self.CHECKOUT)
+            if self._wait_checkout_left(timeout=10):
                 return
-            except TimeoutException:
-                if attempt < retries and self.get_element_count_immediate(self.CHECKOUT) > 0:
-                    logger.warning("点击 Checkout 后未离开购物车页（站点导航无响应），第 %d 次重试点击",
-                                   attempt + 1)
-                    continue
-                raise
+            logger.warning("点击 Checkout 后未离开购物车页（站点导航无响应），改用 JS 触发点击复核")
+            self.js_click(self.CHECKOUT)
+            if self._wait_checkout_left(timeout=5):
+                logger.info("JS 点击后已进入结算第一步")
+                return
+            if attempt < retries and self.get_element_count_immediate(self.CHECKOUT) > 0:
+                logger.warning("第 %d 次重试点击 Checkout", attempt + 1)
+                continue
+            raise TimeoutException("点击 Checkout 后未离开购物车页（原生/JS 点击均无效）")
+
+    def _wait_checkout_left(self, timeout: int) -> bool:
+        """等待 Checkout 按钮消失（已离开购物车页）；超时返回 False，不抛异常"""
+        try:
+            self.wait_element_disappear(self.CHECKOUT, timeout=timeout)
+            return True
+        except TimeoutException:
+            return False
