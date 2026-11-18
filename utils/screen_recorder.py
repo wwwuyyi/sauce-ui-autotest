@@ -15,7 +15,9 @@ screen_recorder.py —— 用例级屏幕录制器（工具层）
 4. 延迟导入 Pillow：录制全程不依赖 Pillow，仅在合成 GIF 的一刻才 import，
    未安装 Pillow 时优雅降级（返回 False，仅保留静态截图）；
 5. 体积控制：合成时等比缩放到 gif_width 宽（默认 640px），控制 GIF 体积，
-   内嵌 Allure/HTML 报告与 Pages 发布都不臃肿。
+   内嵌 Allure/HTML 报告与 Pages 发布都不臃肿；
+6. 并发安全：帧缓冲的 append 与读取一律持锁，GIF 合成前先在锁内取快照再迭代，
+   杜绝后台线程 append 与主线程迭代同一 deque 的竞态（失败钩子触发时录制线程仍在运行）。
 """
 import logging
 import threading
@@ -42,6 +44,9 @@ class ScreenRecorder:
         self._max_frames = max_frames
         self._gif_width = gif_width
         self._frames = deque(maxlen=max_frames)   # 环形缓冲：只留最近 N 帧 PNG bytes
+        # 帧缓冲互斥锁：后台线程 append 与 save_gif/frame_count 读取串行化，
+        # 避免 deque 在迭代期间被并发修改（RuntimeError: deque mutated during iteration）
+        self._frames_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
 
@@ -63,7 +68,9 @@ class ScreenRecorder:
         """
         while not self._stop_event.is_set():
             try:
-                self._frames.append(self._driver.get_screenshot_as_png())
+                frame = self._driver.get_screenshot_as_png()
+                with self._frames_lock:
+                    self._frames.append(frame)
             except Exception:
                 pass  # 录制失败绝不反噬用例主流程（并发忙/窗口关闭等一律忽略）
             for _ in range(int(self._interval / 0.05)):
@@ -77,8 +84,12 @@ class ScreenRecorder:
         :param path: 输出 GIF 文件路径（建议放 reports/screenshots/，与静态截图同目录）
         :return: True=GIF 已生成；False=条件不满足（调用方降级为仅静态截图）
         """
-        if len(self._frames) < 2:
-            logger.warning("录制帧数不足（%d），跳过 GIF 合成", len(self._frames))
+        # 先取稳定快照再迭代：锁内只做浅拷贝（PNG bytes 不可变），
+        # 合成过程不持锁，后台线程继续录制不受阻塞，且迭代对象不再被并发修改
+        with self._frames_lock:
+            frames = list(self._frames)
+        if len(frames) < 2:
+            logger.warning("录制帧数不足（%d），跳过 GIF 合成", len(frames))
             return False
         try:
             from PIL import Image  # 延迟导入：未安装 Pillow 不影响用例执行，只影响 GIF
@@ -88,7 +99,7 @@ class ScreenRecorder:
             return False
 
         try:
-            images = [Image.open(BytesIO(data)).convert("RGB") for data in self._frames]
+            images = [Image.open(BytesIO(data)).convert("RGB") for data in frames]
             width = self._gif_width
             scaled = [img.resize((width, max(1, int(img.height * width / img.width))))
                       for img in images]
@@ -105,10 +116,11 @@ class ScreenRecorder:
             return False
 
         logger.info("失败录屏 GIF 已生成: %s（%d 帧，约 %.1fs）",
-                    path, len(self._frames), len(self._frames) * self._interval)
+                    path, len(frames), len(frames) * self._interval)
         return True
 
     @property
     def frame_count(self) -> int:
         """当前缓冲帧数（排查用）"""
-        return len(self._frames)
+        with self._frames_lock:
+            return len(self._frames)
