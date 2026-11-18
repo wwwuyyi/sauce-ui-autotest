@@ -68,7 +68,7 @@ class BasePage:
 
     def find_element(self, locator: Locator, timeout: Optional[int] = None) -> WebElement:
         """显式等待元素【可见】后返回该元素（最常用的查找方式）"""
-        logger.info("等待元素可见: %s", locator)
+        logger.debug("等待元素可见: %s", locator)
         try:
             return self._wait(timeout).until(EC.visibility_of_element_located(locator))
         except TimeoutException as exc:
@@ -76,7 +76,7 @@ class BasePage:
 
     def find_element_presence(self, locator: Locator, timeout: Optional[int] = None) -> WebElement:
         """显式等待元素【出现在 DOM】（不要求可见）后返回该元素"""
-        logger.info("等待元素出现: %s", locator)
+        logger.debug("等待元素出现: %s", locator)
         try:
             return self._wait(timeout).until(EC.presence_of_element_located(locator))
         except TimeoutException as exc:
@@ -84,7 +84,7 @@ class BasePage:
 
     def find_element_clickable(self, locator: Locator, timeout: Optional[int] = None) -> WebElement:
         """显式等待元素【可点击】后返回该元素（点击前专用）"""
-        logger.info("等待元素可点击: %s", locator)
+        logger.debug("等待元素可点击: %s", locator)
         try:
             return self._wait(timeout).until(EC.element_to_be_clickable(locator))
         except TimeoutException as exc:
@@ -92,7 +92,7 @@ class BasePage:
 
     def find_elements(self, locator: Locator, timeout: Optional[int] = None) -> List[WebElement]:
         """显式等待【至少一个匹配元素出现在 DOM】后返回全部匹配元素列表"""
-        logger.info("查找元素列表: %s", locator)
+        logger.debug("查找元素列表: %s", locator)
         try:
             self._wait(timeout).until(EC.presence_of_all_elements_located(locator))
         except TimeoutException as exc:
@@ -149,19 +149,19 @@ class BasePage:
 
     def wait_element_disappear(self, locator: Locator, timeout: Optional[int] = None) -> None:
         """等待元素从页面消失（不可见或移出 DOM 均满足，常用于等待 loading 遮罩关闭）"""
-        logger.info("等待元素消失: %s", locator)
+        logger.debug("等待元素消失: %s", locator)
         self._wait(timeout).until(EC.invisibility_of_element_located(locator))
 
     def wait_text_present(self, locator: Locator, text: str, timeout: Optional[int] = None) -> None:
         """等待元素文本变为指定内容（常用于角标数字变化类断言）"""
-        logger.info("等待元素文本变为[%s]: %s", text, locator)
+        logger.debug("等待元素文本变为[%s]: %s", text, locator)
         self._wait(timeout).until(EC.text_to_be_present_in_element(locator, text))
 
     # ===================== 基础操作：点击 / 输入 / 取值 =====================
 
     def click(self, locator: Locator, timeout: Optional[int] = None) -> None:
         """等待元素可点击后执行点击（最常用操作，失败自动截图并抛异常）"""
-        logger.info("点击元素: %s", locator)
+        logger.debug("点击元素: %s", locator)
         element = self.find_element_clickable(locator, timeout)
         try:
             element.click()
@@ -242,7 +242,7 @@ class BasePage:
         3. 仍不一致时用 JS 原生 setter 写值并派发 input/change 事件兜底，
            再回读确认；全部失败才抛 ValueError，避免空表单被静默提交。
         """
-        logger.info("向元素输入内容: %s", locator)
+        logger.debug("向元素输入内容: %s", locator)
         target = text or ""
         try:
             for attempt in range(3):  # 初次输入 + 最多 2 次校正重输
@@ -312,7 +312,7 @@ class BasePage:
         注意：使用"存在性"等待而非"可见性"——隐藏元素（如收起态菜单容器
         .bm-menu-wrap）的属性同样可读，可见性等待会导致读取隐藏元素属性时超时。
         """
-        logger.info("获取元素属性[%s]: %s", attribute, locator)
+        logger.debug("获取元素属性[%s]: %s", attribute, locator)
         return self.find_element_presence(locator, timeout).get_attribute(attribute)
 
     def get_element_rect(self, locator: Locator, timeout: Optional[int] = None) -> dict:
@@ -377,7 +377,7 @@ class BasePage:
 
     def switch_to_alert(self, timeout: Optional[int] = None) -> Alert:
         """显式等待弹窗出现并切换，返回 Alert 对象"""
-        logger.info("等待弹窗出现")
+        logger.debug("等待弹窗出现")
         self._wait(timeout).until(EC.alert_is_present())
         return self.driver.switch_to.alert
 
@@ -387,12 +387,12 @@ class BasePage:
 
     def alert_accept(self, timeout: Optional[int] = None) -> None:
         """点击弹窗【确定】"""
-        logger.info("点击弹窗[确定]")
+        logger.debug("点击弹窗[确定]")
         self.switch_to_alert(timeout).accept()
 
     def alert_dismiss(self, timeout: Optional[int] = None) -> None:
         """点击弹窗【取消】"""
-        logger.info("点击弹窗[取消]")
+        logger.debug("点击弹窗[取消]")
         self.switch_to_alert(timeout).dismiss()
 
     def alert_input_text(self, text: str, timeout: Optional[int] = None) -> None:
@@ -405,7 +405,7 @@ class BasePage:
 
     def switch_to_iframe(self, iframe_reference, timeout: Optional[int] = None) -> None:
         """切换到 iframe：支持定位器元组 (By.XXX, 表达式) 或 iframe 的 name/id 字符串"""
-        logger.info("切换到 iframe: %s", iframe_reference)
+        logger.debug("切换到 iframe: %s", iframe_reference)
         self._wait(timeout).until(EC.frame_to_be_available_and_switch_to_it(iframe_reference))
 
     def switch_to_default_content(self) -> None:
@@ -421,7 +421,7 @@ class BasePage:
     def switch_to_new_window(self) -> None:
         """切换到最近新打开的窗口/标签页"""
         handles = self.driver.window_handles
-        logger.info("共 %d 个窗口句柄，切换到最新窗口", len(handles))
+        logger.debug("共 %d 个窗口句柄，切换到最新窗口", len(handles))
         self.driver.switch_to.window(handles[-1])
 
     def switch_to_window(self, index: int) -> None:
@@ -445,7 +445,7 @@ class BasePage:
         "Timed out receiving message from renderer"），此时重发一次 get
         通常可恢复；本地托管站点不会触发该分支。
         """
-        logger.info("打开页面: %s", url)
+        logger.debug("打开页面: %s", url)
         try:
             self.driver.get(url)
         except TimeoutException as exc:
@@ -462,27 +462,27 @@ class BasePage:
 
     def refresh(self) -> None:
         """刷新当前页面"""
-        logger.info("刷新页面")
+        logger.debug("刷新页面")
         self.driver.refresh()
 
     def back(self) -> None:
         """浏览器后退"""
-        logger.info("浏览器后退")
+        logger.debug("浏览器后退")
         self.driver.back()
 
     def forward(self) -> None:
         """浏览器前进"""
-        logger.info("浏览器前进")
+        logger.debug("浏览器前进")
         self.driver.forward()
 
     def wait_url_contains(self, url_part: str, timeout: Optional[int] = None) -> None:
         """等待当前 URL 包含指定片段（页面跳转类断言前置等待）"""
-        logger.info("等待 URL 包含: %s", url_part)
+        logger.debug("等待 URL 包含: %s", url_part)
         self._wait(timeout).until(EC.url_contains(url_part))
 
     def wait_url_to_be(self, url: str, timeout: Optional[int] = None) -> None:
         """等待当前 URL 精确等于指定地址"""
-        logger.info("等待 URL 精确变为: %s", url)
+        logger.debug("等待 URL 精确变为: %s", url)
         self._wait(timeout).until(EC.url_to_be(url))
 
     # ===================== Cookie 操作 =====================
@@ -493,14 +493,14 @@ class BasePage:
 
     def delete_all_cookies(self) -> None:
         """清空当前会话全部 Cookie（未登录/会话失效用例的前置操作）"""
-        logger.info("清空全部 Cookie")
+        logger.debug("清空全部 Cookie")
         self.driver.delete_all_cookies()
 
     # ===================== 下拉框操作（Select） =====================
 
     def select_by_value(self, locator: Locator, value: str, timeout: Optional[int] = None) -> None:
         """下拉框按 value 选中选项（Select 为 Selenium 标准组件，替代手写点击）"""
-        logger.info("下拉选择 value=%s: %s", value, locator)
+        logger.debug("下拉选择 value=%s: %s", value, locator)
         element = self.find_element_presence(locator, timeout)
         Select(element).select_by_value(value)
 
@@ -518,7 +518,7 @@ class BasePage:
     def wait_attribute_equals(self, locator: Locator, attribute: str, expected: str,
                               timeout: Optional[int] = None) -> None:
         """等待元素某属性值变为期望值（如侧边栏 aria-hidden == 'true'）"""
-        logger.info("等待元素属性[%s]变为[%s]: %s", attribute, expected, locator)
+        logger.debug("等待元素属性[%s]变为[%s]: %s", attribute, expected, locator)
 
         def _predicate(driver):
             try:
@@ -531,7 +531,7 @@ class BasePage:
 
     def wait_window_count(self, count: int, timeout: Optional[int] = None) -> None:
         """等待浏览器窗口/标签页数量达到指定值（外链新开窗口场景）"""
-        logger.info("等待窗口数量达到 %d", count)
+        logger.debug("等待窗口数量达到 %d", count)
         self._wait(timeout).until(lambda d: len(d.window_handles) == count)
 
     def is_alert_present(self, timeout: int = 3) -> bool:

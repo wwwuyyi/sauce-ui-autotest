@@ -9,8 +9,9 @@ log_util.py —— 日志工具（工具层）
 
 设计要点：
 - 幂等初始化：根 logger 只配置一次，重复调用不会叠加重复 handler；
-- 分级日志：DEBUG / INFO / WARNING / ERROR，业务流程动作打 INFO，
-  异常现场打 ERROR，排障细节打 DEBUG；
+- 分级日志：DEBUG / INFO / WARNING / ERROR。默认阈值 INFO——业务节点（登录/加购/
+  结算/菜单）、兜底生效、告警与错误默认输出；逐元素查找/等待/点击等底层细节为 DEBUG，
+  默认不落盘不刷屏，排障时可在首次初始化传入 logging.DEBUG 完整输出；
 - 三级降噪分级：
     a. 项目自身代码（base/ pages/ test_cases/ utils/）→ 保持 INFO/DEBUG 中文业务日志；
     b. 第三方库（selenium / urllib3 / requests 等）→ 统一显式 WARNING，
@@ -49,10 +50,11 @@ class LogUtil:
     _initialized = False  # 类变量初始化标记：保证整个进程只配置一次
 
     @classmethod
-    def setup(cls, level: int = logging.DEBUG) -> None:
+    def setup(cls, level: int = logging.INFO) -> None:
         """初始化日志系统（幂等：多次调用不会产生重复输出）
 
-        :param level: 全局日志级别，默认 DEBUG（文件记录全部细节）
+        :param level: 终端与文件的默认阈值，默认 INFO（业务节点/兜底/告警/错误）；
+                      逐元素查找等底层细节为 DEBUG，排障时首次调用传 logging.DEBUG 打开
         """
         if cls._initialized:
             return
@@ -76,7 +78,7 @@ class LogUtil:
             backupCount=15,    # 最多保留 15 个历史文件
             encoding="utf-8",
         )
-        file_handler.setLevel(logging.DEBUG)      # 文件保留最详细的 DEBUG 细节
+        file_handler.setLevel(level)              # 与终端同阈值（默认 INFO，避免逐元素 DEBUG 撑大日志）
         file_handler.suffix = ".%Y-%m-%d.log"     # 滚动文件命名：automation.log.2026-10-10.log
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
