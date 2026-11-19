@@ -15,7 +15,7 @@ import logging
 from selenium.webdriver.common.by import By
 
 from base.base_page import BasePage
-from pages.inventory_page import InventoryPage
+from pages import locators
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +29,15 @@ class ItemPage(BasePage):
     DETAILS_DESC = (By.CSS_SELECTOR, ".inventory_details_desc")             # 详情页商品描述
     DETAILS_PRICE = (By.CSS_SELECTOR, ".inventory_details_price")           # 详情页商品价格
     DETAILS_IMG = (By.CSS_SELECTOR, "img.inventory_details_img")            # 详情页商品图片
-    BACK_BTN = (By.CSS_SELECTOR, "[data-test='back-to-products']")          # 返回列表按钮
-    INVENTORY_LIST = (By.CSS_SELECTOR, ".inventory_list")                   # 列表容器（详情页应不存在）
+    BACK_BTN = locators.BACK_TO_PRODUCTS                                    # 返回列表按钮
+    INVENTORY_LIST = locators.INVENTORY_LIST                                # 列表容器（详情页应不存在）
     # 详情页加购/移除按钮：data-test 为通用值（add-to-cart / remove）。
     # 实测 DOM：详情页按钮不带商品 slug——与列表页"[data-test='add-to-cart-{slug}']"
     # 命名规则不同；原设计文档"共用同一 data-test"的描述与实际站点不符，以实测为准。
     ADD_BTN = (By.CSS_SELECTOR, "[data-test='add-to-cart']")
     REMOVE_BTN = (By.CSS_SELECTOR, "[data-test='remove']")
     # 与列表页共用组件（定位器常量直接引用，无 descriptor 隐患）
-    BADGE = InventoryPage.BADGE
+    BADGE = locators.BADGE
 
     # ===================== 业务方法：加载与信息读取 =====================
 

@@ -19,6 +19,7 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
 from base.base_page import BasePage
+from pages import locators
 from pages.login_page import LoginPage
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class MenuPage(BasePage):
     BURGER_BTN = (By.ID, "react-burger-menu-btn")            # 汉堡菜单按钮
     CROSS_BTN = (By.ID, "react-burger-cross-btn")            # 菜单关闭按钮
     MENU_WRAP = (By.CSS_SELECTOR, ".bm-menu-wrap")           # 菜单容器（aria-hidden 权威状态）
-    INVENTORY_LIST = (By.CSS_SELECTOR, ".inventory_list")    # 商品列表容器（All Items 成功标志）
+    INVENTORY_LIST = locators.INVENTORY_LIST                 # 商品列表容器（All Items 成功标志）
     OVERLAY = (By.CSS_SELECTOR, ".bm-overlay")               # 遮罩层
     ALL_ITEMS = (By.CSS_SELECTOR, "[data-test='inventory-sidebar-link']")  # All Items
     ABOUT = (By.CSS_SELECTOR, "[data-test='about-sidebar-link']")          # About（外链新窗口）

@@ -19,6 +19,7 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
 from base.base_page import BasePage
+from pages import locators
 
 logger = logging.getLogger(__name__)
 
@@ -31,17 +32,17 @@ class InventoryPage(BasePage):
 
     # ===================== 元素定位 =====================
     PRODUCT_SORT = (By.CSS_SELECTOR, "select[data-test='product-sort-container']")  # 排序下拉框
-    INVENTORY_LIST = (By.CSS_SELECTOR, ".inventory_list")               # 商品列表容器
-    INVENTORY_ITEM = (By.CSS_SELECTOR, ".inventory_item")               # 商品块
-    INVENTORY_ITEM_NAME = (By.CSS_SELECTOR, ".inventory_item_name")     # 商品名称
+    INVENTORY_LIST = locators.INVENTORY_LIST                             # 商品列表容器
+    INVENTORY_ITEM = locators.INVENTORY_ITEM                             # 商品块
+    INVENTORY_ITEM_NAME = locators.INVENTORY_ITEM_NAME                   # 商品名称
     INVENTORY_ITEM_PRICE = (By.CSS_SELECTOR, ".inventory_item_price")   # 商品价格
     INVENTORY_ITEM_DESC = (By.CSS_SELECTOR, ".inventory_item_desc")     # 商品描述
-    INVENTORY_ITEM_IMG = (By.CSS_SELECTOR, "img.inventory_item_img")    # 商品图片
+    INVENTORY_ITEM_IMG = locators.INVENTORY_ITEM_IMG                     # 商品图片
     ITEM_IMG_ALT = (By.CSS_SELECTOR, ".inventory_item_img")             # 图片元素（alt 属性断言）
-    BADGE = (By.CSS_SELECTOR, "[data-test='shopping-cart-badge']")      # 购物车角标（归零后从 DOM 移除）
-    CART_LINK = (By.CSS_SELECTOR, "[data-test='shopping-cart-link']")   # 购物车图标
-    PRIMARY_HEADER = (By.CSS_SELECTOR, ".primary_header")               # 顶部 header
-    ADD_ANY = (By.CSS_SELECTOR, "[data-test^='add-to-cart-']")          # 所有加购按钮
+    BADGE = locators.BADGE                                               # 购物车角标（归零后从 DOM 移除）
+    CART_LINK = locators.CART_LINK                                       # 购物车图标
+    PRIMARY_HEADER = locators.PRIMARY_HEADER                             # 顶部 header
+    ADD_ANY = locators.ADD_TO_CART_ANY                                   # 所有加购按钮
     REMOVE_ANY = (By.CSS_SELECTOR, "[data-test^='remove-']")            # 所有移除按钮
 
     @staticmethod

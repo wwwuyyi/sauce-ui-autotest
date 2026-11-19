@@ -17,7 +17,7 @@ from decimal import Decimal
 from selenium.webdriver.common.by import By
 
 from base.base_page import BasePage
-from pages.inventory_page import InventoryPage
+from pages import locators
 
 logger = logging.getLogger(__name__)
 
@@ -33,25 +33,25 @@ class CheckoutPage(BasePage):
     CONTINUE = (By.CSS_SELECTOR, "[data-test='continue']")
     CANCEL = (By.CSS_SELECTOR, "[data-test='cancel']")
     # -- 错误提示（登录/结算共用） --
-    ERROR_MESSAGE = (By.CSS_SELECTOR, "h3[data-test='error']")
-    ERROR_CONTAINER = (By.CSS_SELECTOR, ".error-message-container")
+    ERROR_MESSAGE = locators.ERROR_MESSAGE
+    ERROR_CONTAINER = locators.ERROR_CONTAINER
     # -- 第二步：概览页 --
-    CART_LIST = (By.CSS_SELECTOR, ".cart_list")
-    CART_ITEM = (By.CSS_SELECTOR, ".cart_item")
+    CART_LIST = locators.CART_LIST
+    CART_ITEM = locators.CART_ITEM
     FINISH = (By.CSS_SELECTOR, "[data-test='finish']")
     SUMMARY_INFO = (By.CSS_SELECTOR, ".summary_info")
     SUMMARY_SUBTOTAL = (By.CSS_SELECTOR, ".summary_subtotal_label")
     SUMMARY_TAX = (By.CSS_SELECTOR, ".summary_tax_label")
     SUMMARY_TOTAL = (By.CSS_SELECTOR, ".summary_total_label")
     # -- 公共 --
-    TITLE = (By.CSS_SELECTOR, ".title")
-    BADGE = InventoryPage.BADGE      # 购物车角标（下单完成后应清空）
-    INVENTORY_LIST = InventoryPage.INVENTORY_LIST   # 商品列表容器（Back Home 成功标志）
+    TITLE = locators.TITLE
+    BADGE = locators.BADGE                           # 购物车角标（下单完成后应清空）
+    INVENTORY_LIST = locators.INVENTORY_LIST         # 商品列表容器（Back Home 成功标志）
     # -- 第三步：完成页 --
     COMPLETE_HEADER = (By.CSS_SELECTOR, "[data-test='complete-header']")
     COMPLETE_TEXT = (By.CSS_SELECTOR, ".complete-text")
     PONY_EXPRESS = (By.CSS_SELECTOR, "img.pony_express")
-    BACK_TO_PRODUCTS = (By.CSS_SELECTOR, "[data-test='back-to-products']")
+    BACK_TO_PRODUCTS = locators.BACK_TO_PRODUCTS
 
     # ===================== 业务方法：第一步（信息表单） =====================
 

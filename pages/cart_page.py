@@ -13,6 +13,7 @@ import logging
 from selenium.webdriver.common.by import By
 
 from base.base_page import BasePage
+from pages import locators
 from pages.inventory_page import InventoryPage
 
 logger = logging.getLogger(__name__)
@@ -22,18 +23,18 @@ class CartPage(BasePage):
     """购物车页对象：商品核对 / 删除 / 继续购物 / 去结算"""
 
     # ===================== 元素定位 =====================
-    CART_LIST = (By.CSS_SELECTOR, ".cart_list")                     # 购物车列表容器
-    INVENTORY_LIST = InventoryPage.INVENTORY_LIST                   # 商品列表容器（继续购物成功标志）
-    CART_ITEM = (By.CSS_SELECTOR, ".cart_item")                     # 购物车商品行
+    CART_LIST = locators.CART_LIST                                  # 购物车列表容器
+    INVENTORY_LIST = locators.INVENTORY_LIST                        # 商品列表容器（继续购物成功标志）
+    CART_ITEM = locators.CART_ITEM                                  # 购物车商品行
     CART_ITEM_NAME = (By.CSS_SELECTOR, ".cart_item .inventory_item_name")   # 行内商品名称
     CART_ITEM_PRICE = (By.CSS_SELECTOR, ".cart_item .inventory_item_price") # 行内商品价格
     CART_QUANTITY = (By.CSS_SELECTOR, ".cart_quantity")             # 行内数量
     CART_ITEM_LABEL = (By.CSS_SELECTOR, ".cart_item_label")         # 行内商品信息区
-    TITLE = (By.CSS_SELECTOR, ".title")                             # 页面主标题
+    TITLE = locators.TITLE                                          # 页面主标题
     CONTINUE_SHOPPING = (By.CSS_SELECTOR, "[data-test='continue-shopping']")  # 继续购物按钮
     CHECKOUT = (By.CSS_SELECTOR, "[data-test='checkout']")          # 去结算按钮
-    CART_LINK = InventoryPage.CART_LINK                             # 顶部购物车图标
-    BADGE = InventoryPage.BADGE                                     # 购物车角标
+    CART_LINK = locators.CART_LINK                                  # 顶部购物车图标
+    BADGE = locators.BADGE                                          # 购物车角标
     # 必须 staticmethod 包装：直接赋值会把普通函数绑定为本类方法，多传 self 参数
     remove_button = staticmethod(InventoryPage.remove_button)
 

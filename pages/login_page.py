@@ -24,6 +24,7 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
 from base.base_page import BasePage
+from pages import locators
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +36,18 @@ class LoginPage(BasePage):
     USERNAME_INPUT = (By.ID, "user-name")                           # 用户名输入框
     PASSWORD_INPUT = (By.ID, "password")                            # 密码输入框
     LOGIN_BUTTON = (By.ID, "login-button")                          # 登录按钮
-    ERROR_MESSAGE = (By.CSS_SELECTOR, "h3[data-test='error']")      # 错误提示文案（登录/结算/未登录共用）
-    ERROR_CONTAINER = (By.CSS_SELECTOR, ".error-message-container") # 错误提示容器
+    ERROR_MESSAGE = locators.ERROR_MESSAGE                          # 错误提示文案（登录/结算/未登录共用）
+    ERROR_CONTAINER = locators.ERROR_CONTAINER                      # 错误提示容器
 
     # ===================== 二、登录结果校验元素（商品列表页） =====================
-    INVENTORY_LIST = (By.CSS_SELECTOR, ".inventory_list")             # 商品列表容器
-    INVENTORY_ITEM = (By.CSS_SELECTOR, ".inventory_item")             # 商品块
-    INVENTORY_ITEM_NAME = (By.CSS_SELECTOR, ".inventory_item_name")   # 商品名称
-    INVENTORY_ITEM_IMG = (By.CSS_SELECTOR, "img.inventory_item_img")  # 商品图片
-    PRODUCTS_TITLE = (By.CSS_SELECTOR, ".title")                      # 页面主标题（Products）
-    ADD_TO_CART_BTN = (By.CSS_SELECTOR, "[data-test^='add-to-cart-']")    # 所有加购按钮
-    SHOPPING_CART_LINK = (By.CSS_SELECTOR, "[data-test='shopping-cart-link']")  # 购物车图标
-    PRIMARY_HEADER = (By.CSS_SELECTOR, ".primary_header")             # 顶部 header
+    INVENTORY_LIST = locators.INVENTORY_LIST                          # 商品列表容器
+    INVENTORY_ITEM = locators.INVENTORY_ITEM                          # 商品块
+    INVENTORY_ITEM_NAME = locators.INVENTORY_ITEM_NAME                # 商品名称
+    INVENTORY_ITEM_IMG = locators.INVENTORY_ITEM_IMG                  # 商品图片
+    PRODUCTS_TITLE = locators.TITLE                                   # 页面主标题（Products）
+    ADD_TO_CART_BTN = locators.ADD_TO_CART_ANY                        # 所有加购按钮
+    SHOPPING_CART_LINK = locators.CART_LINK                           # 购物车图标
+    PRIMARY_HEADER = locators.PRIMARY_HEADER                          # 顶部 header
 
     # ===================== 一、登录表单业务方法 =====================
 
