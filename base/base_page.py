@@ -153,9 +153,22 @@ class BasePage:
         self._wait(timeout).until(EC.invisibility_of_element_located(locator))
 
     def wait_text_present(self, locator: Locator, text: str, timeout: Optional[int] = None) -> None:
-        """等待元素文本变为指定内容（常用于角标数字变化类断言）"""
-        logger.debug("等待元素文本变为[%s]: %s", text, locator)
+        """等待元素文本包含指定内容（子串匹配，通用场景）"""
+        logger.debug("等待元素文本包含[%s]: %s", text, locator)
         self._wait(timeout).until(EC.text_to_be_present_in_element(locator, text))
+
+    def wait_text_equals(self, locator: Locator, text: str, timeout: Optional[int] = None) -> None:
+        """等待元素文本精确等于指定内容（角标类断言用，避免 '1' 子串匹配 '12'）"""
+        logger.debug("等待元素文本精确变为[%s]: %s", text, locator)
+
+        def _predicate(driver):
+            try:
+                element = driver.find_element(*locator)
+            except NoSuchElementException:
+                return False
+            return (element.text or "") == text
+
+        self._wait(timeout).until(_predicate)
 
     # ===================== 基础操作：点击 / 输入 / 取值 =====================
 

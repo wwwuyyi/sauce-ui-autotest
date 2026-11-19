@@ -263,8 +263,8 @@ class InventoryPage(BasePage):
         logger.info("预置购物车完成，共 %d 件商品", len(slugs))
 
     def wait_badge_text(self, text: str) -> None:
-        """等待购物车角标数字变为指定值"""
-        self.wait_text_present(self.BADGE, text)
+        """等待购物车角标数字精确变为指定值（避免 '1' 子串匹配 '12'）"""
+        self.wait_text_equals(self.BADGE, text)
 
     def get_badge_text(self) -> str:
         """获取角标数字文本"""

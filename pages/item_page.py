@@ -107,8 +107,8 @@ class ItemPage(BasePage):
         return not self.is_element_present(self.ADD_BTN, timeout=2)
 
     def wait_badge_text(self, text: str) -> None:
-        """等待购物车角标变为指定数字（加购后角标异步刷新，确定性等待）"""
-        self.wait_text_present(self.BADGE, text)
+        """等待购物车角标精确变为指定数字（避免 '1' 子串匹配 '12'）"""
+        self.wait_text_equals(self.BADGE, text)
 
     def get_badge_text(self) -> str:
         """购物车角标数字（详情页加购后 +1 断言）"""
