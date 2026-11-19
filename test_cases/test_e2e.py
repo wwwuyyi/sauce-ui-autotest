@@ -32,6 +32,7 @@ CONFIG = get_effective_config()
 URLS = CONFIG["urls"]
 TITLES = CONFIG["expected"]["titles"]
 DEFAULT_SLUGS = CONFIG["checkout"]["default_item_slugs"]
+E2E = CONFIG["e2e"]
 
 
 @allure.epic("Sauce Demo 商城")
@@ -68,7 +69,7 @@ class TestEndToEnd:
             for product in expected_products:
                 slug = product["slug"]
                 assert inventory_page.get_button_text(
-                    inventory_page.remove_button(slug)) == "Remove"
+                    inventory_page.remove_button(slug)) == E2E["remove_button_text"]
                 assert inventory_page.is_add_button_absent(slug)
             assert inventory_page.get_badge_text() == str(len(expected_products))
 
@@ -84,8 +85,8 @@ class TestEndToEnd:
             assert cart.get_cart_item_count() == 2
             assert cart.get_cart_item_names() == [p["name"] for p in expected_products]
             assert cart.get_cart_item_prices() == [f"${p['price']}" for p in expected_products]
-            assert cart.get_cart_quantities() == ["1", "1"]
-            assert cart.get_badge_text() == "2"
+            assert cart.get_cart_quantities() == E2E["cart_quantities"]
+            assert cart.get_badge_text() == E2E["cart_badge_text"]
 
         # -------- 节点4-结算信息表单 --------
         with allure.step("点击去结算，进入信息表单页"):
