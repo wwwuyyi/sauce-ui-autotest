@@ -5,3 +5,4 @@
 -r requirements.txt
 
 ruff==0.17.0            # 静态检查（规则集见 ruff.toml；本地与 CI 必须同版本）
+mypy==2.4.1             # 类型检查（范围与模式见 mypy.ini，仅 base/pages 非严格模式）

@@ -19,6 +19,7 @@ login_page.py —— 登录页面对象（Page 对象层）
 """
 import logging
 import time
+from typing import Optional
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
@@ -71,7 +72,7 @@ class LoginPage(BasePage):
         self.click_login()
 
     def login_and_wait_inventory(self, username: str, password: str,
-                                 timeout: int = None, retries: int = 1) -> None:
+                                 timeout: Optional[int] = None, retries: int = 1) -> None:
         """登录并等待商品列表加载；登录被站点拒绝时自动重输重试。
 
         背景：公共演示站偶发"凭证正确却被拒绝"（返回 'Username and password
@@ -97,7 +98,7 @@ class LoginPage(BasePage):
 
     def get_username_value(self) -> str:
         """回读用户名输入框当前值（用于校验登录失败后输入未被清空）"""
-        return self.get_attribute(self.USERNAME_INPUT, "value")
+        return self.get_attribute(self.USERNAME_INPUT, "value") or ""
 
     def get_error_message(self) -> str:
         """获取登录错误提示文案文本"""
@@ -135,7 +136,7 @@ class LoginPage(BasePage):
 
     # ===================== 二、登录结果校验业务方法 =====================
 
-    def wait_inventory_loaded(self, timeout: int = None) -> None:
+    def wait_inventory_loaded(self, timeout: Optional[int] = None) -> None:
         """等待商品列表页加载完成（列表容器可见即视为加载成功）
 
         超时后若检测到登录错误提示文案，说明是"登录被拒"而非单纯加载慢，
@@ -150,7 +151,7 @@ class LoginPage(BasePage):
             raise
 
     def login_and_measure_inventory_load(self, username: str, password: str,
-                                         timeout: int = None) -> float:
+                                         timeout: Optional[int] = None) -> float:
         """登录并测量商品列表加载耗时（性能类用例：计时与断言分离）
 
         使用 time.monotonic() 单调时钟计时（不受系统时间调整影响），

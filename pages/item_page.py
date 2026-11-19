@@ -11,6 +11,7 @@ item_page.py —— 商品详情页对象（Page 对象层）
           "add-to-cart-{slug}" 命名规则不同，以实测 DOM 为准。
 """
 import logging
+from typing import Optional
 
 from selenium.webdriver.common.by import By
 
@@ -41,7 +42,7 @@ class ItemPage(BasePage):
 
     # ===================== 业务方法：加载与信息读取 =====================
 
-    def wait_detail_loaded(self, timeout: int = None) -> None:
+    def wait_detail_loaded(self, timeout: Optional[int] = None) -> None:
         """等待详情页加载完成（详情容器可见）"""
         self.find_element(self.DETAILS_CONTAINER, timeout)
 
@@ -114,7 +115,7 @@ class ItemPage(BasePage):
         """购物车角标数字（详情页加购后 +1 断言）"""
         return self.get_text(self.BADGE)
 
-    def wait_badge_disappear(self, timeout: int = None) -> None:
+    def wait_badge_disappear(self, timeout: Optional[int] = None) -> None:
         """等待角标从 DOM 移除（移除购物车后的确定性等待）"""
         self.wait_element_disappear(self.BADGE, timeout)
 
@@ -122,7 +123,7 @@ class ItemPage(BasePage):
         """角标是否已从 DOM 移除"""
         return not self.is_element_present(self.BADGE, timeout=2)
 
-    def wait_detail_image_loaded(self, timeout: int = None) -> None:
+    def wait_detail_image_loaded(self, timeout: Optional[int] = None) -> None:
         """等待详情图片完成解码（naturalWidth 断言的前置等待）"""
         self.wait_all_images_loaded(self.DETAILS_IMG, timeout)
 

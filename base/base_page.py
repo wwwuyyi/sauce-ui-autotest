@@ -319,7 +319,8 @@ class BasePage:
             logger.error("获取元素文本失败: %s, 异常: %s", locator, exc)
             raise
 
-    def get_attribute(self, locator: Locator, attribute: str, timeout: Optional[int] = None) -> str:
+    def get_attribute(self, locator: Locator, attribute: str,
+                      timeout: Optional[int] = None) -> Optional[str]:
         """获取元素属性值（如 value / src / aria-hidden）
 
         注意：使用"存在性"等待而非"可见性"——隐藏元素（如收起态菜单容器

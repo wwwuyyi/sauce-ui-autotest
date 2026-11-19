@@ -62,8 +62,10 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install -r requirements-dev.txt
-      - name: 静态检查（ruff，版本锁定于 requirements-dev.txt）
-        run: ruff check .
+      - name: 静态检查（ruff + mypy，版本锁定于 requirements-dev.txt）
+        run: |
+          ruff check .
+          mypy
       # 本地站点与测试同一 step 内启动：避免 GitHub runner 在 step 结束时清理后台进程。
       # Xvfb 常驻单实例 + DISPLAY=:99 共享：-n 并行的所有 worker 共用一个虚拟显示；
       # 有头 Chrome 规避 CI 无头输入事件丢失；--reruns 1 作为站点偶发抖动兜底。

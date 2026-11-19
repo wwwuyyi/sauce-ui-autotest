@@ -13,6 +13,7 @@ checkout_page.py —— 结算下单页对象（Page 对象层）
 """
 import logging
 from decimal import Decimal
+from typing import Optional
 
 from selenium.webdriver.common.by import By
 
@@ -55,7 +56,7 @@ class CheckoutPage(BasePage):
 
     # ===================== 业务方法：第一步（信息表单） =====================
 
-    def wait_step_one_loaded(self, timeout: int = None) -> None:
+    def wait_step_one_loaded(self, timeout: Optional[int] = None) -> None:
         """等待结算第一步加载完成（表单出现）"""
         self.find_element(self.FIRST_NAME, timeout)
 
@@ -96,7 +97,7 @@ class CheckoutPage(BasePage):
 
     def get_first_name_value(self) -> str:
         """回读 FirstName 输入框当前值（输入未被清洗/截断断言用）"""
-        return self.get_attribute(self.FIRST_NAME, "value")
+        return self.get_attribute(self.FIRST_NAME, "value") or ""
 
     def is_first_name_absent(self) -> bool:
         """表单是否已离开页面（提交成功后表单应消失）"""
@@ -124,7 +125,7 @@ class CheckoutPage(BasePage):
 
     # ===================== 业务方法：第二步（概览页） =====================
 
-    def wait_overview_loaded(self, timeout: int = None) -> None:
+    def wait_overview_loaded(self, timeout: Optional[int] = None) -> None:
         """等待概览页加载完成（Finish 按钮与商品清单可见）"""
         self.find_element(self.FINISH, timeout)
         self.find_element(self.CART_LIST, timeout)
@@ -164,7 +165,7 @@ class CheckoutPage(BasePage):
     def _is_complete_visible(self) -> bool:
         return self.is_element_visible(self.COMPLETE_HEADER, timeout=0)
 
-    def wait_complete_loaded(self, timeout: int = None) -> None:
+    def wait_complete_loaded(self, timeout: Optional[int] = None) -> None:
         """等待订单完成页加载完成"""
         self.find_element(self.COMPLETE_HEADER, timeout)
 

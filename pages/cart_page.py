@@ -9,6 +9,7 @@ cart_page.py —— 购物车页对象（Page 对象层）
           [data-test='checkout']、行内删除按钮 [data-test='remove-{slug}']。
 """
 import logging
+from typing import Optional
 
 from selenium.webdriver.common.by import By
 
@@ -40,7 +41,7 @@ class CartPage(BasePage):
 
     # ===================== 业务方法 =====================
 
-    def wait_cart_page_loaded(self, timeout: int = None) -> None:
+    def wait_cart_page_loaded(self, timeout: Optional[int] = None) -> None:
         """等待购物车页加载完成（列表容器可见）"""
         self.find_element(self.CART_LIST, timeout)
 
@@ -76,7 +77,7 @@ class CartPage(BasePage):
         """角标是否已从 DOM 移除"""
         return not self.is_element_present(self.BADGE, timeout=2)
 
-    def wait_badge_disappear(self, timeout: int = None) -> None:
+    def wait_badge_disappear(self, timeout: Optional[int] = None) -> None:
         """等待角标从 DOM 移除（删除商品后角标异步刷新，确定性等待）"""
         self.wait_element_disappear(self.BADGE, timeout)
 

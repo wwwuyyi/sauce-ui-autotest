@@ -14,6 +14,7 @@ menu_page.py —— 侧边栏菜单页对象（Page 对象层）
       不影响可见性判定），因此开合状态一律以 aria-hidden 属性为权威依据。
 """
 import logging
+from typing import Optional
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
@@ -45,7 +46,7 @@ class MenuPage(BasePage):
 
     # ===================== 业务方法 =====================
 
-    def open_menu(self, timeout: int = None) -> None:
+    def open_menu(self, timeout: Optional[int] = None) -> None:
         """点击汉堡按钮打开侧边栏：等待展开动画完成后，关闭按钮与四个菜单项全部可见
 
         强化说明：
@@ -76,7 +77,7 @@ class MenuPage(BasePage):
             fail_message="侧边栏展开后关键要素未全部可见",
         )
 
-    def close_menu(self, timeout: int = None) -> None:
+    def close_menu(self, timeout: Optional[int] = None) -> None:
         """点击关闭按钮收起侧边栏，等待菜单容器进入收起态（JS 点击兜底）"""
         wait_time = timeout or self.MENU_TIMEOUT
         self.click(self.CROSS_BTN)
@@ -90,7 +91,7 @@ class MenuPage(BasePage):
 
     def get_menu_aria_hidden(self) -> str:
         """回读菜单容器 aria-hidden（'false'=展开 / 'true'=收起）"""
-        return self.get_attribute(self.MENU_WRAP, "aria-hidden")
+        return self.get_attribute(self.MENU_WRAP, "aria-hidden") or ""
 
     def is_menu_closed(self) -> bool:
         """菜单是否处于收起态"""
@@ -133,7 +134,7 @@ class MenuPage(BasePage):
         """点击 About（跳转 Sauce Labs 官网，站点实现可能为新窗口或同窗口跳转）"""
         self.click(self.ABOUT)
 
-    def open_about_and_navigate(self, url_prefix: str, timeout: int = None) -> bool:
+    def open_about_and_navigate(self, url_prefix: str, timeout: Optional[int] = None) -> bool:
         """点击 About 并进入外链页（兼容"新开窗口"与"同窗口跳转"两种实现）
 
         :param url_prefix: 外链 URL 前缀（来自 config/env.yaml，页面层不读配置）
@@ -155,7 +156,7 @@ class MenuPage(BasePage):
         """点击 Reset App State（重置购物车与按钮状态）"""
         self.click(self.RESET)
 
-    def click_logout(self, retries: int = 1, fallback_url: str = None) -> None:
+    def click_logout(self, retries: int = 1, fallback_url: Optional[str] = None) -> None:
         """点击 Logout（退出登录回到登录页）
 
         健壮性：公共演示站偶发"点击后导航无响应"；CI headless 环境下站点前端 JS 卡死时

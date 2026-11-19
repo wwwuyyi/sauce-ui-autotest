@@ -13,6 +13,7 @@ inventory_page.py —— 商品列表页对象（Page 对象层）
 import json
 import logging
 from decimal import Decimal
+from typing import Optional
 
 import allure
 from selenium.common.exceptions import TimeoutException
@@ -62,7 +63,7 @@ class InventoryPage(BasePage):
 
     # ===================== 业务方法：加载与读取 =====================
 
-    def wait_inventory_loaded(self, timeout: int = None) -> None:
+    def wait_inventory_loaded(self, timeout: Optional[int] = None) -> None:
         """等待商品列表页加载完成（列表容器可见即视为加载成功）"""
         self.find_element(self.INVENTORY_LIST, timeout)
 
@@ -107,9 +108,9 @@ class InventoryPage(BasePage):
 
     def get_sort_value(self) -> str:
         """回读当前下拉框选中值（排序生效的判定依据）"""
-        return self.get_attribute(self.PRODUCT_SORT, "value")
+        return self.get_attribute(self.PRODUCT_SORT, "value") or ""
 
-    def sort_and_wait_names(self, value: str, expected_names: list, timeout: int = None) -> None:
+    def sort_and_wait_names(self, value: str, expected_names: list, timeout: Optional[int] = None) -> None:
         """排序并等待商品顺序变为期望序列（功能正常站点的确定性等待）"""
         self.sort_by(value)
         base_timeout = timeout or self.timeout
@@ -139,7 +140,7 @@ class InventoryPage(BasePage):
             logger.warning("排序触发站点原生弹窗（异常账号特征），已自动点击确定")
             self.alert_accept()
 
-    def wait_product_images_loaded(self, timeout: int = None) -> None:
+    def wait_product_images_loaded(self, timeout: Optional[int] = None) -> None:
         """等待 6 张商品图片全部完成解码（naturalWidth 断言的前置等待，防采样竞态）"""
         self.wait_all_images_loaded(self.INVENTORY_ITEM_IMG, timeout)
 
@@ -281,11 +282,11 @@ class InventoryPage(BasePage):
         """角标是否已从 DOM 移除（购物车清空标志）"""
         return not self.is_element_present(self.BADGE, timeout=2)
 
-    def wait_badge_disappear(self, timeout: int = None) -> None:
+    def wait_badge_disappear(self, timeout: Optional[int] = None) -> None:
         """等待角标从 DOM 移除（清空/重置后的确定性等待，替代短轮询断言）"""
         self.wait_element_disappear(self.BADGE, timeout)
 
-    def wait_buttons_reset(self, expected_add_count: int = 6, timeout: int = None) -> None:
+    def wait_buttons_reset(self, expected_add_count: int = 6, timeout: Optional[int] = None) -> None:
         """等待加购/移除按钮状态复位（Reset App State 后渲染完成的确定性等待）"""
         self.wait_until(
             lambda _: (self.get_add_button_count() == expected_add_count
@@ -294,7 +295,7 @@ class InventoryPage(BasePage):
             fail_message="Reset 后按钮状态未恢复为全部加购")
 
     def wait_buttons_restored_after_reset(self, expected_add_count: int = 6,
-                                          timeout: int = None) -> None:
+                                          timeout: Optional[int] = None) -> None:
         """Reset 后等待按钮复位，带自动刷新兜底
 
         实测发现：当前站点版本 Reset App State 清除购物车（角标消失）后，
@@ -330,7 +331,7 @@ class InventoryPage(BasePage):
             fail_message=f"点击商品[{product_id}]后未离开列表页（原生/JS 点击均无效）",
         )
 
-    def open_cart(self, retries: int = 1, fallback_url: str = None) -> None:
+    def open_cart(self, retries: int = 1, fallback_url: Optional[str] = None) -> None:
         """点击购物车图标进入购物车页（URL 进入购物车页为成功标志）
 
         健壮性：新版站点为 React SPA，购物车图标只绑定客户端路由 push，CI 无头
