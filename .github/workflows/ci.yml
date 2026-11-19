@@ -1,6 +1,6 @@
 # CI 工作流（两个 job 按触发源分工，均为定时，不随 push/PR 自动触发）：
 #   smoke job —— 每两天 09:17（北京时间）定时：本地托管站点上跑冒烟 7 条核心主链路；
-#   pages job —— 每周一 09:17（北京时间）定时 / 手动：本地托管站点上跑全量 57 条，
+#   pages job —— 每周一 09:17（北京时间）定时 / 手动：本地托管站点上跑全量 62 条，
 #                内置生成器渲染单文件 HTML 报告并发布到 GitHub Pages
 #                （报告地址 https://<用户名>.github.io/sauce-ui-autotest/，
 #                需一次性在仓库 Settings → Pages → Source 选择 "GitHub Actions"）。
@@ -109,7 +109,7 @@ jobs:
         with: { python-version: "3.11" }
       - run: pip install -r requirements-dev.txt
       # 定时任务 / 手动 target=local：本地站点全量（确定性报告，Xvfb + 有头 Chrome）
-      - name: 启动本地站点并运行全量测试（确定性报告，56 条，并行 -n 4）
+      - name: 启动本地站点并运行全量测试（确定性报告，62 条，并行 -n 4）
         if: github.event_name == 'schedule' || inputs.target == 'local'
         run: |
           python scripts/serve_local_site.py --port 8000 &
@@ -130,7 +130,7 @@ jobs:
           WAIT_TIMEOUT: "30"
           BASE_URL: "http://127.0.0.1:8000/"
       # 手动 target=live：线上 saucedemo 监控，站点抖动不把工作流标红
-      - name: 运行全量测试（线上 saucedemo 监控，56 条，并行 -n 4）
+      - name: 运行全量测试（线上 saucedemo 监控，62 条，并行 -n 4）
         if: inputs.target == 'live'
         continue-on-error: true
         run: python -m pytest --browser=chrome --reruns 1 --reruns-delay 3 -n 4
